@@ -28,6 +28,8 @@ The folder contains a ReadMe file with instructions on how to run the example.
 
 ## Installation from source
 
-Quandenser depends on the Proteowizard and Boost libraries, which are installed by the builder scripts (`admin/builders/<platform>_build.<ext>`). These scripts are currently largely untested except for the Ubuntu version.
+First, clone the repository using `git clone --recursive https://github.com/statisticalbiotechnology/quandenser.git`. Note the `--recursive` flag which is needed to pull in the submodules.
 
-To install Quandenser, you can use the provided installation script `./quickbuild.sh`, which will install the executables in the `/usr/bin` folder (needs superuser rights). If you do not have superuser rights or want to install the executable somewhere else, modify the script accordingly by setting the `-DCMAKE_INSTALL_PREFIX` flag to the desired location.
+Quandenser depends on the Proteowizard and Boost libraries, which are automatically installed by the builder scripts. 
+
+To install Quandenser, you can use the provided installation script `./quickbuild.sh` (Unix) or `./quickbuild.bat`/`./quickbuild64.bat` (Windows 32-bit and 64-bit respectively), which calls the appropriate build script for your platform located at `admin/builders/<platform>_build.<ext>`. Note that these scripts are currently largely untested except for Ubuntu. By default, it will install the executables in the `/usr/bin` folder (needs superuser rights). If you do not have superuser rights or want to install the executable somewhere else, modify the script accordingly by setting the `-DCMAKE_INSTALL_PREFIX` flag to the desired location.
