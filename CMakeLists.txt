@@ -55,7 +55,7 @@ set(MARACLUSTER_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/maracluster)
 include("${MARACLUSTER_SOURCE_DIR}/CommonCMake.txt") # get the "local" version number
 load_config_files_with_output_dir("${MARACLUSTER_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext/maracluster")
 
-add_subdirectory(ext/maracluster/src ./maracluster)
+add_subdirectory(ext/maracluster/src ./maracluster EXCLUDE_FROM_ALL)
 
 foreach (TARGET maracluster batchlibrary maraclusterlibrary)
   target_include_directories(${TARGET} PRIVATE ${MARACLUSTER_SOURCE_DIR})
@@ -71,7 +71,7 @@ set(PERCOLATOR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/percolator)
 include("${PERCOLATOR_SOURCE_DIR}/CommonCMake.txt") # get the "local" version number
 load_config_files_with_output_dir("${PERCOLATOR_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext/percolator")
 
-add_subdirectory(ext/percolator/src ./percolator)
+add_subdirectory(ext/percolator/src ./percolator EXCLUDE_FROM_ALL)
 
 foreach (TARGET perclibrary fido picked_protein percolator qvality)
   target_include_directories(${TARGET} PRIVATE ${PERCOLATOR_SOURCE_DIR})
