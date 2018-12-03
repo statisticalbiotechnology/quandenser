@@ -28,7 +28,7 @@ fi
 
 sudo apt-get update;
 sudo apt-get upgrade;
-sudo apt-get -y install g++ make cmake
+sudo apt-get -y install g++ make cmake maven
 
 mkdir -p ${build_dir}/tools
 cd ${build_dir}/tools
