@@ -1,4 +1,4 @@
-/******************************************************************************  
+/******************************************************************************
   Copyright 2015-2017 Matthew The <matthew.the@scilifelab.se>
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   See the License for the specific language governing permissions and
   limitations under the License.
-  
+
  ******************************************************************************/
 
 #include "Quandenser.h"
@@ -24,7 +24,8 @@ Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"),
     outputSpectrumFile_(""), maraclusterPpmTol_(20.0f),
     alignPpmTol_(20.0f), alignRTimeStdevTol_(10.0f),
     linkPEPThreshold_(0.25), linkPEPMbrSearchThreshold_(0.05),
-    maxFeatureCandidates_(2) {}
+    maxFeatureCandidates_(2),
+    parallel_1_(0), parallel_2_(0), parallel_3_(0), parallel_4_(0) {}
 
 std::string Quandenser::greeter() {
   std::ostringstream oss;
@@ -56,22 +57,22 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   callStream << endl;
   call_ = callStream.str();
   call_ = call_.substr(0,call_.length()-1); // trim ending carriage return
-  
+
   maraclusterArgs_.push_back("maracluster");
   maraclusterArgs_.push_back("mode_placeholder");
   maraclusterArgs_.push_back("--splitMassChargeStates");
-  
+
   percolatorArgs_.push_back("percolator");
   percolatorArgs_.push_back("--only-psms");
   percolatorArgs_.push_back("--post-processing-tdc");
-  /* prevents percolator's Caller::parseOptions from throwing an error because 
+  /* prevents percolator's Caller::parseOptions from throwing an error because
      no input file was specified */
-  percolatorArgs_.push_back("input_file_placeholder"); 
-  
+  percolatorArgs_.push_back("input_file_placeholder");
+
   std::ostringstream intro;
   intro << greeter() << "\nUsage:\n" << endl;
   intro << "  quandenser -b <batch_file_list> -f <output_directory>" << std::endl;
-  
+
   // init
   // available 1-letter abbreviations: d,e,g,i,j,k,q,s,u,v,w,x,y,z
   // A,C,D,E,F,G,H,J,K,L,N,O,Q,R,S,T,U,V,W,X,Y,Z
@@ -107,7 +108,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   cmd.defineOption("F",
       "percolator-train-fdr",
       "False discovery rate threshold to define positive examples in training. Set to testFDR if 0 (default: 0.02).",
-      "value"); 
+      "value");
   cmd.defineOption("M",
       "dinosaur-memory",
       "Memory available for Dinosaur. String should consist of a number followed by a \"G\" for gigabytes or \"M\" for megabytes (default: 24000M).",
@@ -148,57 +149,74 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "target-search-threshold",
       "Minimum posterior error probability for re-searching for a feature with a targeted search. Setting this to 1.0 will cause the targeted search to be skipped (lowest: 0.0, highest: 1.0, default: 0.05).",
       "double");
+  cmd.defineOption("W",
+      "parallel-1",
+      "Parallel quandenser, stop1",
+      "int");
+  cmd.defineOption("X",
+      "parallel-2",
+      "Parallel quandenser, stop2",
+      "int");
+  cmd.defineOption("Y",
+      "parallel-3",
+      "Parallel quandenser, stop3",
+      "int");
+  cmd.defineOption("Z",
+      "parallel-4",
+      "Parallel quandenser, stop4",
+      "int");
+
   /*
     maxFeatureCandidates_(2)
     */
   // parse and handle return codes (display help etc...)
   cmd.parseArgs(argc, argv);
-  
+
   if (cmd.optionSet("batch")) {
     spectrumBatchFileFN_ = cmd.options["batch"];
-    
+
     maraclusterArgs_.push_back("--batch");
     maraclusterArgs_.push_back(cmd.options["batch"]);
   }
-  
+
   if (cmd.optionSet("output-folder")) {
     outputFolder_ = cmd.options["output-folder"];
   }
-  
+
   if (cmd.optionSet("spec-out")) {
     outputSpectrumFile_ = cmd.options["spec-out"];
   }
-  
+
   if (cmd.optionSet("prefix")) {
     fnPrefix_ = cmd.options["prefix"];
-    
+
     maraclusterArgs_.push_back("--prefix");
     maraclusterArgs_.push_back(cmd.options["prefix"]);
   }
-  
+
   if (cmd.optionSet("max-missing")) {
     maxMissingValues_ = cmd.getInt("max-missing", 0, 1000);;
   }
-  
+
   if (cmd.optionSet("verbatim")) {
     int v = cmd.getInt("verbatim", 0, 5);
     Globals::VERB = v;
-    
+
     maraclusterArgs_.push_back("--verbatim");
     maraclusterArgs_.push_back(cmd.options["verbatim"]);
-    
+
     percolatorArgs_.push_back("--verbatim");
     percolatorArgs_.push_back(cmd.options["verbatim"]);
   }
-  
+
   if (cmd.optionSet("dinosaur-memory")) {
     DinosaurIO::setJavaMemory(cmd.options["dinosaur-memory"]);
   }
-  
+
   if (cmd.optionSet("dinosaur-threads")) {
     DinosaurIO::setJavaNumThreads(cmd.getInt("dinosaur-threads", 1, 100));
   }
-  
+
   if (cmd.optionSet("maracluster-pval-threshold")) {
     /* just to test if value is valid, MaRaCluster will parse the string */
     float pvalThresholdTest = cmd.getDouble("t", -1000.0, 0.0);
@@ -212,7 +230,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
     maraclusterArgs_.push_back("--pvalThreshold");
     maraclusterArgs_.push_back("-10.0");
   }
-  
+
   percolatorArgs_.push_back("--trainFDR");
   if (cmd.optionSet("percolator-train-fdr")) {
     /* just to test if value is valid, MaRaCluster will parse the string */
@@ -221,7 +239,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   } else {
     percolatorArgs_.push_back("0.02");
   }
-  
+
   percolatorArgs_.push_back("--testFDR");
   if (cmd.optionSet("percolator-test-fdr")) {
     float testFdrTest = cmd.getDouble("percolator-test-fdr", 0.0, 1.0);
@@ -229,35 +247,51 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   } else {
     percolatorArgs_.push_back("0.02");
   }
-  
+
   if (cmd.optionSet("maracluster-mz-tol")) {
     MaRaClusterIO::setPrecursorTolerance(cmd.getDouble("maracluster-mz-tol", 0.0, 100000.0));
   }
-  
+
   if (cmd.optionSet("align-mz-tol")) {
     alignPpmTol_ = cmd.getDouble("align-mz-tol", 0.0, 100000.0);
   }
-  
+
   if (cmd.optionSet("align-rtime-tol")) {
     alignRTimeStdevTol_ = cmd.getDouble("align-rtime-tol", 0.0, 1000.0);
   }
-  
+
   if (cmd.optionSet("intensity-score-cut")) {
     intensityScoreThreshold_ = cmd.getDouble("intensity-score-cut", 0.0, 1.0);
   }
-  
+
   if (cmd.optionSet("ft-link-cut")) {
     linkPEPThreshold_ = cmd.getDouble("ft-link-cut", 0.0, 1.0);
   }
-  
+
   if (cmd.optionSet("ft-link-candidates")) {
     linkPEPThreshold_ = cmd.getInt("ft-link-candidates", 1, 100);
   }
-  
+
   if (cmd.optionSet("target-search-threshold")) {
     maxFeatureCandidates_ = cmd.getDouble("target-search-threshold", 0.0, 1.0);
   }
-  
+
+  if (cmd.optionSet("parallel-1")) {
+    parallel_1_ = 1;
+  }
+
+  if (cmd.optionSet("parallel-2")) {
+    parallel_2_ = 1;
+  }
+
+  if (cmd.optionSet("parallel-3")) {
+    parallel_3_ = cmd.getInt("parallel-3", 0, 99999);  // Maximum depth is 99999
+  }
+
+  if (cmd.optionSet("parallel-4")) {
+    parallel_4_ = 1;
+  }
+
   // if there are arguments left...
   if (cmd.arguments.size() > 0) {
     std::cerr << "Error: too many arguments." << std::endl;
@@ -270,12 +304,12 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       return 0;
     }
   }
-  
+
   return true;
 }
 
-void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder, 
-    const maracluster::SpectrumFileList& fileList, 
+void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
+    const maracluster::SpectrumFileList& fileList,
     const std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap) {
@@ -285,15 +319,15 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   maraclusterArgs[1] = "batch";
   maraclusterArgs.push_back("--output-folder");
   maraclusterArgs.push_back(maraclusterFolder.string());
-  
+
   std::string spectrumOutputFile = ""; /* Not needed here */
   MaRaClusterAdapter maraclusterAdapter(allFeatures, spectrumToPrecursorMap, spectrumOutputFile);
   maraclusterAdapter.parseOptions(maraclusterArgs);
-  
+
   boost::filesystem::path spectrumToPrecursorFilePath(maraclusterFolder);
   spectrumToPrecursorFilePath /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
   std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
-  
+
   if (!boost::filesystem::exists(spectrumToPrecursorFile)) {
     maraclusterAdapter.run();
     spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
@@ -306,8 +340,32 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
       std::cerr << "Deserialized spectrum to precursor map" << std::endl;
     }
   }
-  
+
   clusterFilePath = maraclusterAdapter.getClusterFileName();
+}
+
+void Quandenser::loadFeatures(std::vector<DinosaurFeatureList>& allFeatures){
+  std::ifstream infile("Quandenser_output/dinosaur/allFeatures.txt");
+  std::string line;
+  while(std::getline(infile, line)) {
+    std::istringstream iss(line);
+    int DinosaurFeatureList_size;
+    iss >> DinosaurFeatureList_size;
+    DinosaurFeatureList ft_list;
+    for(int i = 0; i < DinosaurFeatureList_size; i++){
+      std::getline(infile, line);
+      std::istringstream iss(line);
+      DinosaurFeature ft;
+      float precMz, rTime, intensity, rtStart, rtEnd;
+      iss >> precMz >> rTime >> intensity >> rtStart >> rtEnd;
+      int charge, fileIdx, featureIdx;
+      iss >> charge >> fileIdx >> featureIdx;
+      ft.precMz = precMz; ft.rTime = rTime; ft.intensity = intensity; ft.rtStart = rtStart; ft.rtEnd = rtEnd;
+      ft.charge = charge; ft.fileIdx = fileIdx; ft.featureIdx = featureIdx;
+      ft_list.push_back(ft);
+    }
+    allFeatures.push_back(ft_list);
+  }
 }
 
 int Quandenser::run() {
@@ -315,22 +373,22 @@ int Quandenser::run() {
   clock_t startClock;
   time(&startTime);
   startClock = clock();
-  
+
   if (Globals::VERB > 0) {
     std::cerr << extendedGreeter(startTime);
   }
-  
+
   boost::filesystem::path rootPath(outputFolder_);
   boost::system::error_code returnedError;
   boost::filesystem::create_directories(rootPath, returnedError);
-  
+
   if (!boost::filesystem::exists(rootPath)) {
     std::cerr << "Error: could not create output directory at " << outputFolder_ << std::endl;
     return EXIT_FAILURE;
   }
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
-  
+
   boost::filesystem::path dinosaurFolder(rootPath);
   dinosaurFolder /= "dinosaur";
   boost::filesystem::create_directories(dinosaurFolder, returnedError);
@@ -338,18 +396,18 @@ int Quandenser::run() {
     std::cerr << "Error: could not create output directory at " << dinosaurFolder.string() << std::endl;
     return EXIT_FAILURE;
   }
-  
+
   std::vector<boost::filesystem::path> dinosaurFeatureFiles;
-  
+
   std::vector<std::string> files = fileList.getFilePaths();
   for (std::vector<std::string>::const_iterator it = files.begin(); it != files.end(); ++it) {
     if (maracluster::MSFileHandler::getOutputFormat(*it) != "mzml") {
       std::cerr << "Warning: file extension is not .mzML, ignoring file: " << *it << std::endl;
     }
     boost::filesystem::path mzMLFile(*it);
-    
+
     boost::filesystem::path dinosaurFeatureFile(dinosaurFolder.string());
-    
+
     /* TODO: what if we use files with the same filename but in different folders? */
     dinosaurFeatureFile /= mzMLFile.stem().string() + ".features.tsv";
     dinosaurFeatureFiles.push_back(dinosaurFeatureFile);
@@ -368,39 +426,114 @@ int Quandenser::run() {
       }
     }
   }
-  
+  if (parallel_1_) {
+    std::cout << "Parallel stop 1 reached" << std::endl;
+    return EXIT_SUCCESS;
+  }
+
   std::vector<DinosaurFeatureList> allFeatures;
   size_t fileIdx = 0u;
-  for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
-    std::ifstream fileStream(it->string().c_str(), ios::in);
-    DinosaurFeatureList features;
-    DinosaurIO::parseDinosaurFeatureFile(fileStream, fileIdx++, features);
-    
-    features.sortByPrecMz();
-    
-    allFeatures.push_back(features);
-    if (Globals::VERB > 2) {
-      std::cerr << "Read in " << features.size() << " features from " << it->filename() << std::endl;
+  if ( 1 == 0 ) {  // Save for future, you need to load everything perfectly here
+    // Load features from file
+    std::cout << "Parallel 3/4: Loading dinosaur features from Parallel-2" << std::endl;
+    loadFeatures(allFeatures);
+    std::cout << "Parallel 3/4: Loading completed" << std::endl;
+  } else {
+    for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
+      std::ifstream fileStream(it->string().c_str(), ios::in);
+      DinosaurFeatureList features;
+      DinosaurIO::parseDinosaurFeatureFile(fileStream, fileIdx++, features);
+
+      features.sortByPrecMz();
+
+      allFeatures.push_back(features);
+      if (Globals::VERB > 2) {
+        std::cerr << "Read in " << features.size() << " features from " << it->filename() << std::endl;
+      }
     }
-  }  
-  
-  /* spectrumToPrecursorMap: 
-       filled by runMaRaCluster(); 
+  }
+
+  if (parallel_2_) {
+    // Save features from dinosaur
+    std::cout << "Parallel 2: Saving dinosaur features" << std::endl;
+    std::ofstream outfile("Quandenser_output/dinosaur/allFeatures.txt");
+    for(int allFeatures_index = 0; allFeatures_index < allFeatures.size(); allFeatures_index++) {
+      DinosaurFeatureList ft_list = allFeatures[allFeatures_index];
+      outfile << ft_list.size() << std::endl;
+      for(std::vector<DinosaurFeature>::iterator it = ft_list.begin(); it != ft_list.end(); ++it){
+        DinosaurFeature ft = *it;
+        outfile << ft.precMz << '\t' << ft.rTime << '\t' << ft.intensity << '\t' << ft.rtStart
+        << '\t' << ft.rtEnd << '\t' << ft.charge << '\t' << ft.fileIdx << '\t' << ft.featureIdx
+        << std::endl;
+      }
+    }
+    outfile.close();
+    std::cout << "Parallel 2: Save completed" << std::endl;
+  }
+
+  /* spectrumToPrecursorMap:
+       filled by runMaRaCluster();
        consumed by MaRaClusterIO::parseClustersForRTimePairs() */
   SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
   std::string maraclusterSubFolder = "maracluster";
   std::string clusterFilePath;
   runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath, spectrumToPrecursorMap);
-  
+
   AlignRetention alignRetention;
   std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
   MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
-  
-  alignRetention.getAlignModelsTree();
-  
+
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
-  alignRetention.createMinDepthTree(featureAlignmentQueue);
-  
+  if (parallel_3_ || parallel_4_) {
+    std::cout << "Parallel 3/4: Loading alignment from Parallel 2" << std::endl;
+
+    // Load state of featureAlignmentQueue
+    std::ifstream infile("Quandenser_output/maracluster/featureAlignmentQueue.txt");
+    int round;
+    string file1;
+    string file2;
+    int fileidx1;
+    int fileidx2;
+    while (infile >> round >> file1 >> file2 >> fileidx1 >> fileidx2) {
+      FilePair filePair(fileidx1, fileidx2);
+      featureAlignmentQueue.push_back(std::make_pair(round, filePair));
+    }
+    infile.close();
+
+    // Load state of alignRetention
+    alignRetention.LoadState();
+    std::cout << "Parallel 3/4: Loading completed" << std::endl;
+
+  } else {
+      alignRetention.getAlignModelsTree();
+      alignRetention.createMinDepthTree(featureAlignmentQueue);
+  }
+
+  if (parallel_2_) {  // parallel 2 only runs maracluster and outputs the queue to a file
+    std::cout << "Parallel 2: Saving alignment" << std::endl;
+    // Save featureAlignmentQueue vector, used by Nextflow and quandenser
+    std::ofstream outfile("Quandenser_output/maracluster/featureAlignmentQueue.txt");
+    std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
+    for (filePairIt = featureAlignmentQueue.begin();
+          filePairIt != featureAlignmentQueue.end(); ++filePairIt) {
+      FilePair filePair = filePairIt->second;
+      int round = filePairIt->first;
+      boost::filesystem::path file1(fileList.getFilePath(filePair.fileIdx1));
+      boost::filesystem::path file2(fileList.getFilePath(filePair.fileIdx2));
+      // Serialized output stream
+      outfile << round << '\t' << file1.string() << '\t' << file2.string()
+      << '\t' << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << std::endl;
+    }
+    outfile.close();
+
+    // Save alignRetention state
+    alignRetention.SaveState();
+    std::cout << "Parallel 2: Saving completed" << std::endl;
+
+    std::cout << "Parallel stop 2 reached" << std::endl;
+    return EXIT_SUCCESS;
+  }
+
   boost::filesystem::path percolatorFolder(outputFolder_);
   percolatorFolder /= "percolator";
   boost::filesystem::create_directories(percolatorFolder, returnedError);
@@ -408,34 +541,46 @@ int Quandenser::run() {
     std::cerr << "Error: could not create output directory at " << percolatorFolder.string() << std::endl;
     return EXIT_FAILURE;
   }
-  
+
   std::string percolatorOutputFileBaseFN = percolatorFolder.string();
-  
+
   if (maxMissingValues_ < 0) {
     maxMissingValues_ = fileList.size() / 4;
   }
-  
+
   FeatureAlignment featureAlignment(
-      percolatorOutputFileBaseFN, percolatorArgs_, 
-      alignPpmTol_, alignRTimeStdevTol_, linkPEPThreshold_, 
+      percolatorOutputFileBaseFN, percolatorArgs_,
+      alignPpmTol_, alignRTimeStdevTol_, linkPEPThreshold_,
       linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
-  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures);
-  
+
+  // Note: You COULD parallelize this (I've tested it), but since the mapping is so fast, it is not worth it
+  // when running on a cluster, since you have to submit a job for each process.
+  // Note on previous note: If there are large files, this is also slow, so why not parallelize it too? :)
+  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, parallel_3_);
+  if (parallel_3_) {  // parallel 3 runs dinosaur.
+    std::cout << "Parallel stop 3 reached" << std::endl;
+    return EXIT_SUCCESS;
+  }
+
   /* new maracluster run with newly added features */
   std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
   std::string clusterFilePathExtraFeatures;
   SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
   runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures, clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures);
-  
+  if (parallel_4_) {
+    std::cout << "Parallel stop 4 reached" << std::endl;
+    return EXIT_SUCCESS;
+  }
+
   /* sort features by index before feature groups processing */
   std::vector<DinosaurFeatureList>::iterator ftListIt;
   for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
     ftListIt->sortByFeatureIdx();
   }
-  
+
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);
   featureGroups.singleLinkClustering(featureAlignmentQueue, featureAlignment.getFeatureMatches());
-  
+
   std::string maraclusterSubFolderConsensus = "consensus_spectra";
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
   boost::filesystem::path maraclusterFolder(outputFolder_);
@@ -445,42 +590,42 @@ int Quandenser::run() {
   maraclusterArgs.push_back(maraclusterFolder.string());
   maraclusterArgs.push_back("--clusterFile");
   maraclusterArgs.push_back(clusterFilePathExtraFeatures);
-  
+
   std::vector<DinosaurFeatureList> noFeatures;
   SpectrumToPrecursorMap noMap(fileList.size());
   MaRaClusterAdapter maraclusterAdapter(noFeatures, noMap, outputSpectrumFile_);
   maraclusterAdapter.parseOptions(maraclusterArgs);
-  
-  std::map<FeatureId, std::vector<int> > featureToSpectrumCluster; 
+
+  std::map<FeatureId, std::vector<int> > featureToSpectrumCluster;
   std::ifstream fileStreamExtraFeatures(clusterFilePathExtraFeatures.c_str(), ios::in);
-  MaRaClusterIO::parseClustersForConsensusMerge(fileStreamExtraFeatures, 
+  MaRaClusterIO::parseClustersForConsensusMerge(fileStreamExtraFeatures,
       fileList, spectrumToPrecursorMap, featureToSpectrumCluster);
   /* this would also link spectra to features found by matches-between-runs,
      but it seems to (slightly) lower specificity
-  MaRaClusterIO::parseClustersForConsensusMerge(fileStreamExtraFeatures, 
-      fileList, spectrumToPrecursorMapExtraFeatures, 
-      featureToSpectrumCluster); 
+  MaRaClusterIO::parseClustersForConsensusMerge(fileStreamExtraFeatures,
+      fileList, spectrumToPrecursorMapExtraFeatures,
+      featureToSpectrumCluster);
   */
-  
+
   featureGroups.filterConsensusFeatures(allFeatures, featureToSpectrumCluster);
-  
+
   boost::filesystem::path featureGroupsOutFile(outputFolder_);
   featureGroupsOutFile /= fnPrefix_ + ".feature_groups.tsv";
-  featureGroups.printFeatureGroups(featureGroupsOutFile.string(), 
-      allFeatures, featureToSpectrumCluster, 
+  featureGroups.printFeatureGroups(featureGroupsOutFile.string(),
+      allFeatures, featureToSpectrumCluster,
       maraclusterAdapter.getSpectrumClusterToConsensusFeatures());
-  
+
   maraclusterAdapter.run();
-  
+
   time_t endTime;
   clock_t endClock = clock();
   time(&endTime);
   double diff_time = difftime(endTime, startTime);
-  
+
   std::cerr << "Running Quandenser took: "
     << ((double)(endClock - startClock)) / (double)CLOCKS_PER_SEC
     << " cpu seconds or " << diff_time << " seconds wall time" << std::endl;
-                 
+
   return EXIT_SUCCESS;
 }
 
