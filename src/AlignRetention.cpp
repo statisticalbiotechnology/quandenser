@@ -1,4 +1,4 @@
-/******************************************************************************  
+/******************************************************************************
   Copyright 2015-2017 Matthew The <matthew.the@scilifelab.se>
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   See the License for the specific language governing permissions and
   limitations under the License.
-  
+
  ******************************************************************************/
 
 #include "AlignRetention.h"
@@ -36,7 +36,7 @@ bool operator<(const RTimePair& l, const RTimePair& r) {
 
 void AlignRetention::getAlignModelsTree() {
   getAlignModels();
-  
+
   int maxFileIdx = 0;
   RTimePairs::iterator filePairIt;
   std::vector<std::pair<float, FilePair> > sortedWeights;
@@ -44,19 +44,19 @@ void AlignRetention::getAlignModelsTree() {
     FilePair revFilePair = filePairIt->first.getRevFilePair();
     double rmse1 = alignments_[filePairIt->first].getRmse();
     double rmse2 = alignments_[revFilePair].getRmse();
-    
+
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx1);
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx2);
-    
+
     float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
     sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
   }
   std::sort(sortedWeights.begin(), sortedWeights.end());
-  
+
   for (int i = 0; i <= maxFileIdx; ++i) {
     fileGraphNodes_.push_back(FileGraphNode(i));
   }
-  
+
   std::set<int> addedNodes;
   std::set<FilePair> addedLinks;
   if (sortedWeights.size() > 0) {
@@ -73,19 +73,19 @@ void AlignRetention::getAlignModelsTree() {
         addedNodes.insert(fileIdx2);
         fileGraphNodes_[fileIdx1].addNeighbor(fileIdx2);
         fileGraphNodes_[fileIdx2].addNeighbor(fileIdx1);
-        
+
         addedLinks.insert(it->second);
         addedLinks.insert(it->second.getRevFilePair());
-        
+
         if (Globals::VERB > 2) {
           std::cerr << "Inserting link " << fileIdx1 << " to " << fileIdx2 << " with rmse " << it->first << std::endl;
         }
-        
+
         break;
       }
     }
   }
-  
+
   std::map<FilePair, SplineRegression>::iterator alignmentIt;
   for (alignmentIt = alignments_.begin(); alignmentIt != alignments_.end(); ) {
     if (addedLinks.find(alignmentIt->first) == addedLinks.end()) {
@@ -100,26 +100,26 @@ void AlignRetention::getAlignModels() {
   RTimePairs::iterator filePairIt;
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
     std::vector<double> medianRTimesRun1, medianRTimesRun2;
-        
+
     getKnots(filePairIt->second, medianRTimesRun1, medianRTimesRun2);
-    
+
     alignments_[filePairIt->first].setData(medianRTimesRun1, medianRTimesRun2);
     alignments_[filePairIt->first].roughnessPenaltyIRLS();
     bool reversedPair = false;
     float rmse1 = getRMSE(alignments_[filePairIt->first], filePairIt->second, reversedPair);
     alignments_[filePairIt->first].setRmse(rmse1);
-    
+
     FilePair revFilePair = filePairIt->first.getRevFilePair();
     alignments_[revFilePair].setData(medianRTimesRun2, medianRTimesRun1);
     alignments_[revFilePair].roughnessPenaltyIRLS();
     reversedPair = true;
     float rmse2 = getRMSE(alignments_[revFilePair], filePairIt->second, reversedPair);
     alignments_[revFilePair].setRmse(rmse2);
-    
+
     if (Globals::VERB > 2) {
       float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
       std::cerr << "Aligned runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
-          << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1 
+          << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1
           << " rmse2 = " << rmse2 << std::endl;
     }
   }
@@ -127,10 +127,10 @@ void AlignRetention::getAlignModels() {
 
 /* TODO: use cross validation to select an appropriate number of bins */
 /* TODO: use pair with median error in a certain range around the medianIdx. This will be an actual datapoint, but somewhat protected against outliers */
-void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, std::vector<double>& medianRTimesRun1, std::vector<double>& medianRTimesRun2) {  
+void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, std::vector<double>& medianRTimesRun1, std::vector<double>& medianRTimesRun2) {
   std::sort(rTimePairsSingleFilePair.begin(), rTimePairsSingleFilePair.end());
   rTimePairsSingleFilePair.erase(std::unique(rTimePairsSingleFilePair.begin(), rTimePairsSingleFilePair.end() ), rTimePairsSingleFilePair.end() );
-  
+
   std::vector<double> rTimesRun1, rTimesRun2, predictedRTimesRun2;
   std::vector<RTimePair>::const_iterator rtPair;
   for (rtPair = rTimePairsSingleFilePair.begin(); rtPair != rTimePairsSingleFilePair.end(); ++rtPair) {
@@ -139,7 +139,7 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   }
   std::sort(rTimesRun1.begin(), rTimesRun1.end());
   std::sort(rTimesRun2.begin(), rTimesRun2.end());
-  
+
   int numBins = 100;
   float binSize = static_cast<float>(rTimePairsSingleFilePair.size()) / numBins;
   for (int bin = 0; bin < numBins; ++bin) {
@@ -154,7 +154,7 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   }
 }
 
-/* 
+/*
   Robust regression: MAD*1.4826 (https://en.wikipedia.org/wiki/Robust_measures_of_scale)
   Alternatively, we could try this: Huber (http://www.statsmodels.org/dev/generated/statsmodels.robust.scale.Huber.html)
  */
@@ -167,7 +167,7 @@ float AlignRetention::getRMSE(SplineRegression& alignment, std::vector<RTimePair
   }
   if (reversedPair) rTimesRun1.swap(rTimesRun2);
   alignment.predict(rTimesRun1, predictedRTimesRun2);
-  
+
   std::vector<double> absErrors;
   std::vector<double>::const_iterator run2RtIt, predRtIt;
   for (run2RtIt = rTimesRun2.begin(), predRtIt = predictedRTimesRun2.begin(); run2RtIt != rTimesRun2.end(); ++run2RtIt, ++predRtIt) {
@@ -190,15 +190,15 @@ float AlignRetention::getRMSE(SplineRegression& alignment, std::vector<RTimePair
 void AlignRetention::createMinDepthTree(std::vector<std::pair<int, FilePair> >& featureAlignmentQueue) {
   int furthestNode = breadthFirstSearch(0);
   furthestNode = breadthFirstSearch(furthestNode);
-  
+
   int rootNode = getMinimumDepthRoot(furthestNode);
   breadthFirstSearch(rootNode);
-  
+
   /* we can process all feature alignments of the same round in parallel, before moving onto the next round */
   for (std::vector<FileGraphNode>::const_iterator nodeIt = fileGraphNodes_.begin(); nodeIt != fileGraphNodes_.end(); ++nodeIt) {
     int nodeDepth = nodeIt->getDepth();
     int round = maxDepth_ - nodeDepth;
-    
+
     if (nodeDepth > 0) {
       FilePair filePair(nodeIt->getFileIdx(), nodeIt->getParent());
       if (Globals::VERB > 2) {
@@ -206,7 +206,7 @@ void AlignRetention::createMinDepthTree(std::vector<std::pair<int, FilePair> >& 
       }
       featureAlignmentQueue.push_back(std::make_pair(round, filePair));
     }
-    
+
     int childRound = maxDepth_ + nodeDepth;
     for (std::set<int>::const_iterator childNodeIt = nodeIt->getChildrenItBegin(); childNodeIt != nodeIt->getChildrenItEnd(); ++childNodeIt) {
       FilePair childFilePair(nodeIt->getFileIdx(), *childNodeIt);
@@ -220,28 +220,28 @@ void AlignRetention::createMinDepthTree(std::vector<std::pair<int, FilePair> >& 
 }
 
 int AlignRetention::breadthFirstSearch(int startNode) {
-  /* contains pairs (-1*insertion_depth, node_to_investigate). The -1 is 
+  /* contains pairs (-1*insertion_depth, node_to_investigate). The -1 is
      necessary because the default priority queue takes high values first */
-  std::priority_queue<std::pair<int, int> > searchQueue; 
-  
+  std::priority_queue<std::pair<int, int> > searchQueue;
+
   int depth = 0;
   int parent = -1;
   std::set<int> newChildren = fileGraphNodes_[startNode].getNeighbors();
   fileGraphNodes_[startNode].insertInTree(parent, newChildren, depth);
   searchQueue.push(std::make_pair(-1*(depth + 1), startNode));
-  
+
   int lastNode = -1;
   while (searchQueue.size() > 0) {
     std::pair<int, int> depthNodePair = searchQueue.top();
     searchQueue.pop();
     depth = -1*depthNodePair.first;
     startNode = depthNodePair.second;
-    
+
     std::set<int>::const_iterator childIt;
     for (childIt = fileGraphNodes_[startNode].getChildrenItBegin(); childIt != fileGraphNodes_[startNode].getChildrenItEnd(); ++childIt) {
       newChildren = fileGraphNodes_[*childIt].getNeighbors();
       newChildren.erase(startNode);
-      
+
       fileGraphNodes_[*childIt].insertInTree(startNode, newChildren, depth);
       searchQueue.push(std::make_pair(-1*(depth + 1), *childIt));
     }
@@ -256,6 +256,117 @@ int AlignRetention::getMinimumDepthRoot(int lastNode) {
     lastNode = fileGraphNodes_[lastNode].getParent();
   }
   return lastNode;
+}
+
+void AlignRetention::SaveState(){
+  std::ofstream outfile("Quandenser_output/maracluster/alignRetention.txt");
+  /* To save:
+  RTimePairs rTimePairs_;
+  std::map<FilePair, SplineRegression> alignments_;
+  std::vector<FileGraphNode> fileGraphNodes_;
+  int maxDepth_;
+  */
+
+  // alignment_
+  std::map<FilePair, SplineRegression>::iterator alignmentIt;
+  for (alignmentIt = alignments_.begin(); alignmentIt != alignments_.end(); alignmentIt++) {
+
+    // Save filepair + rmse
+    FilePair filePair = alignmentIt->first;
+    SplineRegression spline = alignmentIt->second;
+    outfile << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << '\t' << spline.getRmse() << '\t';
+
+    // Save data
+    std::pair<std::vector<double>, std::vector<double> > vector_pair = spline.getData();
+    std::vector<double> x = vector_pair.first;
+    std::vector<double> y = vector_pair.second;
+
+    // Save x
+    outfile << x.size() << '\t';
+    for(int i = 0; i < x.size(); i++) {
+      outfile << x[i] << '\t';
+    }
+    // Save y
+    outfile << y.size() << '\t';
+    for(int i = 0; i < y.size(); i++) {
+      outfile << y[i] << '\t';
+    }
+    /*
+    RTimePairs::iterator filePairIt;
+    for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
+      outfile << filePairIt->second.size() << '\t';
+      for (std::vector<RTimePair>::iterator rt_pair_it = filePairIt->second.begin(); rt_pair_it != filePairIt->second.end(); ++rt_pair_it){
+        outfile << rt_pair_it->rTime1 << "\t" << rt_pair_it->rTime2 << '\t';
+      }
+      outfile << std::endl;
+    } */
+
+    outfile << std::endl;
+  }
+  outfile.close();
+}
+
+void AlignRetention::LoadState(){
+  // Load state of featureAlignmentQueue
+  std::cout << "Loading state of alignment" << std::endl;
+  std::ifstream infile("Quandenser_output/maracluster/alignRetention.txt");
+  SplineRegression spline;
+  int fileidx1;
+  int fileidx2;
+  while (infile >> fileidx1 >> fileidx2) {
+    FilePair filePair(fileidx1, fileidx2);
+
+    // Read rmse
+    float rmse;
+    infile >> rmse;
+
+    // Read x vector
+    unsigned long int x_size;
+    infile >> x_size;
+    std::vector<double> x;
+    for (unsigned long int i = 0; i < x_size; ++i) {
+      std::string d_string;  // To string, because nan could be in file
+      infile >> d_string;
+      double d = atof(d_string.c_str());
+      x.push_back(d);
+    }
+
+    // Read y vector
+    unsigned long int y_size;
+    infile >> y_size;
+    std::vector<double> y;
+    for (unsigned long int i = 0; i < y_size; ++i) {
+      std::string d_string;  // To string, because nan could be in file
+      infile >> d_string;
+      double d = atof(d_string.c_str());
+      y.push_back(d);
+    }
+    spline.setData(x,y);
+    spline.roughnessPenaltyIRLS();
+    spline.predict(x,y);
+    spline.setRmse(rmse);
+    alignments_[filePair] = spline;
+  }
+
+  /*
+    // rTimePairs_
+    std::vector<double> medianRTimesRun1, medianRTimesRun2;
+    getKnots(filePairIt->second, medianRTimesRun1, medianRTimesRun2);
+    alignments_[filePairIt->first].setData(medianRTimesRun1, medianRTimesRun2);
+    alignments_[filePairIt->first].roughnessPenaltyIRLS();
+    bool reversedPair = false;
+    float rmse1 = getRMSE(alignments_[filePairIt->first], filePairIt->second, reversedPair);
+    alignments_[filePairIt->first].setRmse(rmse1);
+    FilePair revFilePair = filePairIt->first.getRevFilePair();
+    alignments_[revFilePair].setData(medianRTimesRun2, medianRTimesRun1);
+    alignments_[revFilePair].roughnessPenaltyIRLS();
+    reversedPair = true;
+    float rmse2 = getRMSE(alignments_[revFilePair], filePairIt->second, reversedPair);
+    alignments_[revFilePair].setRmse(rmse2);
+  */
+
+  std::cout << "State loaded" << std::endl;
+  infile.close();
 }
 
 } /* namespace quandenser */
