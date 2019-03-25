@@ -42,7 +42,10 @@ class SplineRegression : public BaseSpline {
       x = xx;
       y = yy;
     }
-    
+    std::pair<std::vector<double>, std::vector<double> > getData() {
+      std::pair<std::vector<double>, std::vector<double> > vector_pair = std::make_pair(x, y);
+      return vector_pair;
+    }
     inline void setRmse(const float rmse) { rmse_ = rmse; }
     inline float getRmse() const { return rmse_; }
   protected:
@@ -52,7 +55,7 @@ class SplineRegression : public BaseSpline {
     virtual void limitgamma();
     std::vector<double> y;
     static const double gRange;
-    
+
     float rmse_;
 };
 
