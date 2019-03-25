@@ -1,4 +1,4 @@
-/******************************************************************************  
+/******************************************************************************
   Copyright 2015-2017 Matthew The <matthew.the@scilifelab.se>
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   See the License for the specific language governing permissions and
   limitations under the License.
-  
+
  ******************************************************************************/
 
 #ifndef QUANDENSER_QUANDENSER_H_
@@ -44,39 +44,46 @@
 namespace quandenser {
 
 
-class Quandenser {  
+class Quandenser {
  public:
   Quandenser();
   ~Quandenser() {};
-  
+
   bool parseOptions(int argc, char **argv);
-  
+
   int run();
-  
+
  protected:
   std::string greeter();
   std::string extendedGreeter(time_t& startTime);
-  
+
   std::string call_;
   std::string spectrumBatchFileFN_;
-  
+
   std::string outputFolder_;
   std::string outputSpectrumFile_;
   std::string fnPrefix_;
-  
+
   int maxMissingValues_;
   float intensityScoreThreshold_;
-  
+
   float maraclusterPpmTol_, alignPpmTol_, alignRTimeStdevTol_;
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
-  
-  void runMaRaCluster(const std::string& maRaClusterSubFolder, 
-    const maracluster::SpectrumFileList& fileList, 
+
+  int parallel_1_;
+  int parallel_2_;
+  int parallel_3_;
+  int parallel_4_;
+
+  void runMaRaCluster(const std::string& maRaClusterSubFolder,
+    const maracluster::SpectrumFileList& fileList,
     const std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap);
-  
+
+  void loadFeatures(std::vector<DinosaurFeatureList>& allFeatures);
+
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;
 };
