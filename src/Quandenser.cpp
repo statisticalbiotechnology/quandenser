@@ -484,8 +484,8 @@ int Quandenser::run() {
   MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
 
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
-  if (parallel_3_ != 0 || parallel_3_ != 99999 || parallel_4_) {
-    std::cout << "Parallel 3/4: Loading alignment from Parallel 2" << std::endl;
+  if (parallel_3_ != 0 && parallel_3_ != 99999) {
+    std::cout << "Parallel 3: Loading alignment from Parallel 2" << std::endl;
 
     // Load state of featureAlignmentQueue
     std::ifstream infile("Quandenser_output/maracluster/featureAlignmentQueue.txt");
@@ -502,7 +502,7 @@ int Quandenser::run() {
 
     // Load state of alignRetention
     alignRetention.LoadState();
-    std::cout << "Parallel 3/4: Loading completed" << std::endl;
+    std::cout << "Parallel 3: Loading completed" << std::endl;
 
   } else {
       alignRetention.getAlignModelsTree();
