@@ -219,7 +219,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
 
   if (cmd.optionSet("maracluster-pval-threshold")) {
     /* just to test if value is valid, MaRaCluster will parse the string */
-    float pvalThresholdTest = cmd.getDouble("t", -1000.0, 0.0);
+    float pvalThresholdTest = cmd.getDouble("maracluster-pval-threshold", -1000.0, 0.0);
     maraclusterArgs_.push_back("--clusterThresholds");
     maraclusterArgs_.push_back(cmd.options["maracluster-pval-threshold"]);
     maraclusterArgs_.push_back("--pvalThreshold");
