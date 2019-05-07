@@ -14,8 +14,7 @@
 :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
 @echo off
-set MSVC_VER=14
-set VCTARGET=C:\Program Files (x86)\MSBuild\Microsoft.cpp\v4.0\V%MSVC_VER%0
+
 set SRC_DIR=%~dp0..\..\..\
 set BUILD_DIR=%SRC_DIR%\build\win64
 set RELEASE_DIR=%SRC_DIR%\release\win64
@@ -30,9 +29,9 @@ SHIFT
 GOTO parse
 :endparse
 
-:: use the VS command prompt settings to set-up paths for compiler and builder
-call "C:\Program Files (x86)\Microsoft Visual Studio %MSVC_VER%.0\Common7\Tools\VsDevCmd.bat"
-call "C:\Program Files (x86)\Microsoft Visual Studio %MSVC_VER%.0\VC\vcvarsall.bat" amd64
+call %SRC_DIR%\quandenser\ext\maracluster\admin\builders\setup_env.bat 64bit
+
+set VCTARGET=%PROGRAM_FILES_DIR%\MSBuild\Microsoft.Cpp\v4.0\V%MSVC_VER%0
 
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 :::::::::::: START INSTALL DEPENDENCIES ::::::::::::::::
@@ -46,58 +45,37 @@ if not exist "%RELEASE_DIR%" (md "%RELEASE_DIR%")
 set ZIP_URL=http://downloads.sourceforge.net/sevenzip/7z920.exe
 if not exist "%INSTALL_DIR%\7zip" (
   echo Downloading and installing 7-Zip
-  PowerShell "(new-object System.Net.WebClient).DownloadFile('%ZIP_URL%','%INSTALL_DIR%\7zip.exe')"
+  call :downloadfile %ZIP_URL% %INSTALL_DIR%\7zip.exe
   "%INSTALL_DIR%\7zip.exe" /S /D=%INSTALL_DIR%\7zip
 )
 set ZIP_EXE="%INSTALL_DIR%\7zip\7z.exe"
 
-set CMAKE_BASE=cmake-3.5.2-win32-x86
-set CMAKE_URL=https://cmake.org/files/v3.5/%CMAKE_BASE%.zip
+set CMAKE_BASE=cmake-3.13.4-win32-x86
+set CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v3.13.4/%CMAKE_BASE%.zip
 if not exist "%INSTALL_DIR%\%CMAKE_BASE%" (
   echo Downloading and installing CMake
-  PowerShell "(new-object System.Net.WebClient).DownloadFile('%CMAKE_URL%','%INSTALL_DIR%\cmake.zip')"
+  call :downloadfile %CMAKE_URL% %INSTALL_DIR%\cmake.zip
   %ZIP_EXE% x "%INSTALL_DIR%\cmake.zip" -o"%INSTALL_DIR%" -aoa -xr!doc > NUL
 )
 set CMAKE_EXE="%INSTALL_DIR%\%CMAKE_BASE%\bin\cmake.exe"
 
-::: have not figured out how to install SVN in a custom folder, msiexec + INSTALLDIR/TARGETDIR doesn't work
-set SVN_URL=https://sourceforge.net/projects/win32svn/files/latest/download
-WHERE svn >nul 2>&1
-IF ERRORLEVEL 1 (
-  echo Downloading and installing SVN
-  PowerShell "(new-object System.Net.WebClient).DownloadFile('%SVN_URL%','%INSTALL_DIR%\svn.msi')"
-  cd /D "%INSTALL_DIR%"
-  msiexec /i svn.msi /quiet /Li svn_install.log
-)
-setlocal
-set PATH=%PATH%;C:\Program Files (x86)\Subversion\bin
-
+::: https://teamcity.labkey.org/viewType.html?buildTypeId=bt81 :::
+::: without-t = without tests :::
+set PWIZ_VERSION_URL=https://teamcity.labkey.org/guestAuth/repository/download/bt81/.lastSuccessful/VERSION
+call :downloadfile %PWIZ_VERSION_URL% %INSTALL_DIR%\VERSION
+set /p PWIZ_VERSION_STRING=<%INSTALL_DIR%\VERSION
+set PWIZ_BASE=pwiz-src-without-t-%PWIZ_VERSION_STRING: =_%
+set PWIZ_URL=https://teamcity.labkey.org/guestAuth/repository/download/bt81/.lastSuccessful/%PWIZ_BASE%.tar.bz2
 set PWIZ_DIR=%INSTALL_DIR%\proteowizard
-set REV=10210
-set SHIMADZU_JAMFILE=%PWIZ_DIR%\pwiz\data\vendor_readers\Shimadzu\Jamfile.jam
-set SHIMADZU_JAMFILE2=%PWIZ_DIR%\pwiz_aux\msrc\utility\vendor_api\Shimadzu\Jamfile.jam
-set HDF5_FILE=%PWIZ_DIR%\libraries\hdf5-1.8.7\src\windows\H5pubconf.h
 if not exist "%PWIZ_DIR%\lib" (
   echo Downloading and installing ProteoWizard
   if not exist "%PWIZ_DIR%" (
-    svn co -r %REV% --depth immediates https://svn.code.sf.net/p/proteowizard/code/trunk/pwiz %PWIZ_DIR%
-    svn update -r %REV% --set-depth infinity %PWIZ_DIR%\pwiz
-    svn update -r %REV% --set-depth infinity %PWIZ_DIR%\pwiz_aux
-    svn update -r %REV% --set-depth infinity %PWIZ_DIR%\libraries
+    call :downloadfile %PWIZ_URL% %INSTALL_DIR%\pwiz.tar.bz2
+    if not exist "%INSTALL_DIR%\pwiz.tar" (
+      %ZIP_EXE% x "%INSTALL_DIR%\pwiz.tar.bz2" -o"%INSTALL_DIR%" -aoa > NUL
+    )
+    %ZIP_EXE% x "%INSTALL_DIR%\pwiz.tar" -o"%PWIZ_DIR%" -aoa > NUL
   )
-  
-  ::: There is an issue with some TIMEZONE variables in VS2015 with hdf5, solved in v1.8.16. :::
-  if not exist "%PWIZ_DIR%\libraries\hdf5-1.8.7.tar" (
-    %ZIP_EXE% x "%PWIZ_DIR%\libraries\hdf5-1.8.7.tar.bz2" -o"%PWIZ_DIR%\libraries"
-  )
-  if not exist "%PWIZ_DIR%\libraries\hdf5-1.8.7" (
-    %ZIP_EXE% x "%PWIZ_DIR%\libraries\hdf5-1.8.7.tar" -o"%PWIZ_DIR%\libraries"
-    PowerShell "(Get-Content '%HDF5_FILE%') | ForEach-Object { $_ -replace '#define H5_HAVE_TIMEZONE 1', '/* #define H5_HAVE_TIMEZONE 1 */' } | Set-Content '%HDF5_FILE%'"
-  )
-  
-  ::: The Shimadzu API build has to be changed to include VS2015 in the Jamfile :::
-  PowerShell "(Get-Content '%SHIMADZU_JAMFILE%') | ForEach-Object { $_ -replace '12.0\" \"12.0express', '12.0\" \"14.0\" \"14.0express\" \"12.0express' } | Set-Content '%SHIMADZU_JAMFILE%'"
-  PowerShell "(Get-Content '%SHIMADZU_JAMFILE2%') | ForEach-Object { $_ -replace '12.0\" \"12.0express', '12.0\" \"14.0\" \"14.0express\" \"12.0express' } | Set-Content '%SHIMADZU_JAMFILE2%'"
   
   cd /D "%PWIZ_DIR%"
   echo Starting Proteowizard and Boost build, this can take a while...
@@ -120,6 +98,8 @@ if not exist "%PWIZ_DIR%\lib" (
                 pwiz_aux/msrc/utility/vendor_api/Shimadzu//pwiz_vendor_api_shimadzu ^
                 pwiz/data/vendor_readers/UIMF//pwiz_reader_uimf ^
                 pwiz_aux/msrc/utility/vendor_api/UIMF//pwiz_vendor_api_uimf ^
+                pwiz/data/vendor_readers/UNIFI//pwiz_reader_unifi ^
+                pwiz_aux/msrc/utility/vendor_api/UNIFI//pwiz_vendor_api_unifi ^
                 pwiz/data/vendor_readers/Agilent//pwiz_reader_agilent ^
                 pwiz_aux/msrc/utility/vendor_api/Agilent//pwiz_vendor_api_agilent ^
                 pwiz/data/vendor_readers/Waters//pwiz_reader_waters ^
@@ -145,7 +125,7 @@ if not exist "%PWIZ_DIR%\lib" (
                 /ext/boost//serialization > pwiz_installation.log 2>&1
     
   mkdir lib
-  for /r build-nt-x86_64 %%x in (*.lib) do copy "%%x" lib\ /Y
+  for /r build-nt-x86_64 %%x in (*.lib) do copy "%%x" lib\ /Y > NUL
   cd lib
   PowerShell "(Dir | Rename-Item -NewName { $_.Name -replace '-vc%MSVC_VER%0-mt','' })"
   PowerShell "(Dir | Rename-Item -NewName { $_.Name -replace 'libpwiz_','pwiz_' })"
@@ -156,20 +136,32 @@ if not exist "%PWIZ_DIR%\lib" (
   Ren libsqlite3pp.lib sqlite3pp.lib
   Ren libsqlite3.lib sqlite3.lib
   ::: these DLLs might not work, as they are for VS2013 :::
-  COPY ..\pwiz_aux\msrc\utility\vendor_api\Waters\vc12_x64\* .
-  COPY ..\pwiz_aux\msrc\utility\vendor_api\Bruker\x64\baf2sql_c.* .
+  COPY ..\pwiz_aux\msrc\utility\vendor_api\Waters\vc12_x64\* . > NUL
+  COPY ..\pwiz_aux\msrc\utility\vendor_api\Bruker\x64\baf2sql_c.* . > NUL
+  COPY ..\pwiz_aux\msrc\utility\vendor_api\Bruker\x64\timsdata.* . > NUL
+  
+  ::: Generate lib from dll for cdt.dll
+  setlocal enableDelayedExpansion
+  set DLL_BASE=cdt
+  set DEF_FILE=!DLL_BASE!.def
+  set write=0
+  echo EXPORTS> "!DEF_FILE!"
+  for /f "usebackq tokens=4" %%i in (`dumpbin /exports "!DLL_BASE!.dll"`) do if "!write!"=="1" (echo %%i >> "!DEF_FILE!") else (if %%i==name set write=1)
+  lib /DEF:"!DEF_FILE!" /MACHINE:X64
+  endlocal
+  
   cd ..
 
   mkdir include
-  for /r pwiz %%x in (*.hpp, *.h) do copy "%%x" include\ /Y
+  for /r pwiz %%x in (*.hpp, *.h) do copy "%%x" include\ /Y > NUL
 )
 
 ::: Needed for CPack :::
 set NSIS_DIR=%INSTALL_DIR%\nsis
-set NSIS_URL=https://sourceforge.net/projects/nsis/files/NSIS 3 Pre-release/3.0rc1/nsis-3.0rc1-setup.exe/download
+set NSIS_URL=https://sourceforge.net/projects/nsis/files/NSIS 3/3.04/nsis-3.04-setup.exe/download
 if not exist "%NSIS_DIR%" (
   echo Downloading and installing NSIS installer
-  PowerShell "(new-object System.Net.WebClient).DownloadFile('%NSIS_URL%','%INSTALL_DIR%\nsis.exe')"
+  call :downloadfile "%NSIS_URL%" %INSTALL_DIR%\nsis.exe
   "%INSTALL_DIR%\nsis.exe" /S /D=%INSTALL_DIR%\nsis
 )
 setlocal
@@ -221,4 +213,10 @@ copy "%BUILD_DIR%\quandenser-vendor-support\quan*.exe" "%RELEASE_DIR%"
 
 echo Finished buildscript execution in build directory %BUILD_DIR%
 
-cd "%SRC_DIR%"
+cd /D "%SRC_DIR%"
+
+EXIT /B %errorlevel%
+
+:downloadfile
+PowerShell "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; (new-object System.Net.WebClient).DownloadFile('%1','%2')"
+EXIT /B
