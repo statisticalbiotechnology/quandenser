@@ -20,7 +20,7 @@
 #include <vector>
 #include <sstream>
 
-#include "maracluster/src/BatchSpectrumFiles.h"
+#include "maracluster/src/SpectrumFiles.h"
 #include "maracluster/src/SpectrumHandler.h"
 #include "maracluster/src/MassChargeCandidate.h"
 #include "maracluster/src/ScanId.h"
@@ -31,13 +31,13 @@
 
 namespace quandenser {
 
-class SpectrumFiles : public maracluster::BatchSpectrumFiles {
+class SpectrumFiles : public maracluster::SpectrumFiles {
  public:
   SpectrumFiles(const std::string& precMzFileFolder, 
                const int chargeUncertainty, 
                const std::vector<DinosaurFeatureList>& featureLists,
                SpectrumToPrecursorMap& specToPrecMap) : 
-    BatchSpectrumFiles(precMzFileFolder, chargeUncertainty), featureLists_(featureLists), spectrumToPrecursorMap_(specToPrecMap) {}
+    maracluster::SpectrumFiles(precMzFileFolder, chargeUncertainty), featureLists_(featureLists), spectrumToPrecursorMap_(specToPrecMap) {}
   
  protected:
   void getMassChargeCandidates(pwiz::msdata::SpectrumPtr s, 
