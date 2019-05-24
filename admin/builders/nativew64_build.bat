@@ -156,6 +156,25 @@ if not exist "%PWIZ_DIR%\lib" (
   for /r pwiz %%x in (*.hpp, *.h) do copy "%%x" include\ /Y > NUL
 )
 
+set MVN_BASE=apache-maven-3.6.1
+set MVN_URL=http://ftp.unicamp.br/pub/apache/maven/maven-3/3.6.1/binaries/%MVN_BASE%-bin.zip
+if not exist "%INSTALL_DIR%\%MVN_BASE%" (
+  echo Downloading and installing CMake
+  call :downloadfile %MVN_URL% %INSTALL_DIR%\mvn.zip
+  %ZIP_EXE% x "%INSTALL_DIR%\mvn.zip" -o"%INSTALL_DIR%" > NUL
+)
+setlocal
+set PATH=%PATH%;%INSTALL_DIR%\%MVN_BASE%\bin
+
+set JAVA_BASE=openjdk-8u212-b04
+set JAVA_URL=https://github.com/AdoptOpenJDK/openjdk8-upstream-binaries/releases/download/jdk8u212-b04/OpenJDK8u-x64_windows_8u212b04.zip
+if not exist "%INSTALL_DIR%\%JAVA_BASE%" (
+  echo Downloading and installing Java JDK   
+  call :downloadfile %JAVA_URL% %INSTALL_DIR%\java.zip
+  %ZIP_EXE% x "%INSTALL_DIR%\java.zip" -o"%INSTALL_DIR%" > NUL
+)
+set JAVA_HOME=%INSTALL_DIR%\%JAVA_BASE%
+
 ::: Needed for CPack :::
 set NSIS_DIR=%INSTALL_DIR%\nsis
 set NSIS_URL=https://sourceforge.net/projects/nsis/files/NSIS 3/3.04/nsis-3.04-setup.exe/download
@@ -164,7 +183,6 @@ if not exist "%NSIS_DIR%" (
   call :downloadfile "%NSIS_URL%" %INSTALL_DIR%\nsis.exe
   "%INSTALL_DIR%\nsis.exe" /S /D=%INSTALL_DIR%\nsis
 )
-setlocal
 set PATH=%PATH%;%INSTALL_DIR%\nsis
 
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -183,7 +201,7 @@ if not exist "%BUILD_DIR%" (md "%BUILD_DIR%")
 if not exist "%BUILD_DIR%\quandenser" (md "%BUILD_DIR%\quandenser")
 cd /D "%BUILD_DIR%\quandenser"
 echo cmake quandenser.....
-%CMAKE_EXE% -G "Visual Studio %MSVC_VER% Win64" -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_56_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" "%SRC_DIR%\quandenser"
+%CMAKE_EXE% -G "Visual Studio %MSVC_VER% Win64" -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_67_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" "%SRC_DIR%\quandenser"
 
 echo build quandenser (this will take a few minutes).....
 msbuild PACKAGE.vcxproj /p:VCTargetsPath="%VCTARGET%" /p:Configuration=%BUILD_TYPE% /m
@@ -195,7 +213,7 @@ msbuild PACKAGE.vcxproj /p:VCTargetsPath="%VCTARGET%" /p:Configuration=%BUILD_TY
 if not exist "%BUILD_DIR%\quandenser-vendor-support" (md "%BUILD_DIR%\quandenser-vendor-support")
 cd /D "%BUILD_DIR%\quandenser-vendor-support"
 echo cmake quandenser with vendor support.....
-%CMAKE_EXE% -G "Visual Studio %MSVC_VER% Win64" -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_56_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" -DVENDOR_SUPPORT=ON "%SRC_DIR%\quandenser"
+%CMAKE_EXE% -G "Visual Studio %MSVC_VER% Win64" -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_67_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" -DVENDOR_SUPPORT=ON "%SRC_DIR%\quandenser"
 
 echo build quandenser with vendor support (this will take a few minutes).....
 msbuild PACKAGE.vcxproj /p:VCTargetsPath="%VCTARGET%" /p:Configuration=%BUILD_TYPE% /m

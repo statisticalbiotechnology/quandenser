@@ -20,7 +20,7 @@
 #include <vector>
 #include <sstream>
 
-#include <boost/unordered_map.hpp>
+#include <boost/unordered/unordered_map.hpp>
 
 #include "percolator/src/DataSet.h"
 
