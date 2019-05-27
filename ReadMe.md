@@ -4,7 +4,7 @@ Quandenser condenses quantification data from label-free mass spectrometry exper
 
 ## Installation
 
-An installer for Ubuntu can be found on the Release page. Furthermore, Java >=1.6 has to be installed.
+An installer for all major platforms (Windows, OS X, Ubuntu, etc.) can be found on the Release page. Furthermore, Java >=1.6 has to be installed.
 
 If you prefer to compile from source, or are running on a different operating system, [click here](#installation-from-source).
 
@@ -32,4 +32,4 @@ First, clone the repository using `git clone --recursive https://github.com/stat
 
 Quandenser depends on the Proteowizard and Boost libraries, which are automatically installed by the builder scripts. 
 
-To install Quandenser, you can use the provided installation script `./quickbuild.sh` (Unix) or `./quickbuild.bat`/`./quickbuild64.bat` (Windows 32-bit and 64-bit respectively), which calls the appropriate build script for your platform located at `admin/builders/<platform>_build.<ext>`. Note that these scripts are currently largely untested except for Ubuntu. By default, it will install the executables in the `/usr/bin` folder (needs superuser rights). If you do not have superuser rights or want to install the executable somewhere else, modify the script accordingly by setting the `-DCMAKE_INSTALL_PREFIX` flag to the desired location.
+To install Quandenser, you can use the provided installation script `./quickbuild.sh` (Unix) or `./quickbuild.bat`/`./quickbuild64.bat` (Windows 32-bit and 64-bit respectively), which calls the appropriate build script for your platform located at `admin/builders/<platform>_build.<ext>`. By default, it will install the executables in the `/usr/bin` folder (needs superuser rights). If you do not have superuser rights or want to install the executable somewhere else, modify the script accordingly by setting the `-DCMAKE_INSTALL_PREFIX` flag to the desired location.
