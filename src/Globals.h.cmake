@@ -36,6 +36,7 @@ class Globals {
   static bool fileIsEmpty(const std::string& fileName);
   static void reportProgress(time_t& startTime, clock_t& startClock,
     size_t currentIt, size_t totalIt);
+  static const std::string getJarPath();
 };
 
 } /* namespace quandenser */

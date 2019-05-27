@@ -88,6 +88,8 @@ else (MSVC)
   set(MVN_CMD mvn)
 endif (MSVC)
 
+MESSAGE( STATUS "Building Dinosaur with Maven" )
+
 execute_process(COMMAND ${MVN_CMD} package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
 
 if(NOT "${MVN_RESULT}" STREQUAL "0")

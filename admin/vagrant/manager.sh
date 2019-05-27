@@ -52,7 +52,7 @@ while getopts “hab:s:r:p:” OPTION; do
         p)  case $OPTARG in
                	ubuntu)
                     post="ubuntu64"
-                    vagbox_name="ubuntu/trusty64"
+                    vagbox_name="ubuntu/xenial64"
                     vagbox_url=""
                     package_ext="deb"
                     ;;
@@ -201,7 +201,7 @@ Vagrant.configure("2") do |config|
     :export_options => ['async,insecure,no_subtree_check,no_acl,no_root_squash']
 
   config.vm.provider "virtualbox" do |vb|
-    vb.customize ["modifyvm", :id, "--memory", "4096", "--cpus", "4"]
+    vb.customize ["modifyvm", :id, "--memory", "8192", "--cpus", "4"]
     # vb.gui = true # turn on for trouble shooting, e.g. if boot times out repeatedly
     # Fix "hfs mounted macintosh hd on device root_device" issue
     vb.customize ["modifyvm", :id, "--cpuidset", "1","000206a7","02100800","1fbae3bf","bfebfbff"]
@@ -240,7 +240,7 @@ Vagrant.configure("2") do |config|
   config.ssh.insert_key = false
   config.vm.boot_timeout = 600
   config.vm.provider "virtualbox" do |vb|
-    vb.customize ["modifyvm", :id, "--memory", "4096", "--cpus", "4"]
+    vb.customize ["modifyvm", :id, "--memory", "8192", "--cpus", "4"]
     # vb.gui = true # turn on for trouble shooting, e.g. if boot times out repeatedly
   end
   config.vm.provision :shell do |shell|
