@@ -44,12 +44,20 @@ if [[ -d /opt/local/var/macports ]]
   then
     echo "[ Package manager ] : MacPorts "
     package_manager="sudo port"
-    other_packages="cmake gnutar"
-elif [[ -f ${HOME}/bin/brew ]]
+    other_packages="cmake gnutar wget maven32 openjdk8"
+elif [[ -f ${HOME}/bin/brew ]] || [[ -f /usr/local/bin/brew ]]
   then
     echo "[ Package manager ] : Homebrew "
-    package_manager=$HOME/bin/brew
-    other_packages="cmake gnutar"
+    if [[ -f ${HOME}/bin/brew ]]
+      then
+        package_manager=$HOME/bin/brew
+    else
+      package_manager=brew
+    fi
+    other_packages="cmake gnu-tar wget maven"
+    ${package_manager} update || true # brew.rb raises an error on the vagrant box, just ignore it
+    ${package_manager} tap AdoptOpenJDK/openjdk
+    ${package_manager} cask install adoptopenjdk8
 else
     package_manager_installed=false
 fi
@@ -93,50 +101,7 @@ mkdir -p ${build_dir}/tools
 cd ${build_dir}/tools
 
 if [ ! -d ${build_dir}/tools/proteowizard ]; then
-  echo "Download source code for ProteoWizard from their SVN repository"
-  $package_manager install subversion
-  rev=9393
-  svn co -r ${rev} --depth immediates https://svn.code.sf.net/p/proteowizard/code/trunk/pwiz ./proteowizard
-  svn update -r ${rev} --set-depth infinity ./proteowizard/pwiz
-  svn update -r ${rev} --set-depth infinity ./proteowizard/libraries
-
-  # install and keep libraries in the libs folder of this project for linking
-  cd proteowizard
-
-  ./clean.sh
-
-  echo "Building ProteoWizard and Boost, this may take some time.."
-  
-  # if you have more than 4GB of memory available, you could try to use more than 2 cores to speed things up
-  ./quickbuild.sh -j4 --without-binary-msdata \
-                  pwiz/data/common//pwiz_data_common \
-                  pwiz/data/identdata//pwiz_data_identdata \
-                  pwiz/data/identdata//pwiz_data_identdata_version \
-                  pwiz/data/msdata//pwiz_data_msdata \
-                  pwiz/data/msdata//pwiz_data_msdata_version \
-                  pwiz/data/proteome//pwiz_data_proteome \
-                  pwiz/utility/chemistry//pwiz_utility_chemistry \
-                  pwiz/utility/minimxml//pwiz_utility_minimxml \
-                  pwiz/utility/misc//SHA1 \
-                  pwiz/utility/misc//pwiz_utility_misc \
-                  /ext/zlib//z \
-                  /ext/boost//system \
-                  /ext/boost//thread \
-                  /ext/boost//chrono \
-                  /ext/boost//regex \
-                  /ext/boost//filesystem \
-                  /ext/boost//iostreams \
-                  /ext/boost//program_options \
-                  /ext/boost//serialization \
-                  > ../pwiz_installation.log 2>&1
-
-  # for revision 7692 the "libraries" target does not work, so we have to copy everything manually
-  mkdir -p ../lib
-  find build-macosx-x86_64/ -type f | grep -i .a$ | xargs -I{} cp {} ../lib
-  
-  mkdir -p ../include
-  rsync -ap --include "*/" --include "*.h" --include "*.hpp" --include "*.ipp" --exclude "*" pwiz libraries/boost_1_56_0/boost libraries/boost_aux/boost ../include/
-  rsync -ap --include "*/" --include "*.h" --include "*.hpp" --exclude "*"  libraries/zlib-1.2.3/ ../include/zlib
+  ${src_dir}/quandenser/ext/maracluster/admin/builders/install_proteowizard.sh ${build_dir}/tools
 fi
 
 #-------------------------------------------

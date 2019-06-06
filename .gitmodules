@@ -1,9 +1,9 @@
 [submodule "ext/dinosaur"]
 	path = ext/dinosaur
-	url = git@github.com:MatthewThe/dinosaur.git
+	url = https://github.com/MatthewThe/dinosaur.git
 [submodule "ext/maracluster"]
 	path = ext/maracluster
-	url = git@github.com:statisticalbiotechnology/maracluster.git
+	url = https://github.com/statisticalbiotechnology/maracluster.git
 [submodule "ext/percolator"]
 	path = ext/percolator
-	url = git@github.com:percolator/percolator.git
+	url = https://github.com/percolator/percolator.git

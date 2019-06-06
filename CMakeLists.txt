@@ -82,10 +82,18 @@ endforeach()
 # COMPILING DINOSAUR
 #############################################################################
 
-execute_process(COMMAND mvn package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur RESULT_VARIABLE MVN_RESULT)
+if (MSVC)
+  set(MVN_CMD mvn.cmd)
+else (MSVC)
+  set(MVN_CMD mvn)
+endif (MSVC)
+
+MESSAGE( STATUS "Building Dinosaur with Maven" )
+
+execute_process(COMMAND ${MVN_CMD} package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
 
 if(NOT "${MVN_RESULT}" STREQUAL "0")
-  message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed")
+  message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed: ${MVN_RESULT}")
 endif()
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.3.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})

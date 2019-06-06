@@ -19,8 +19,8 @@
 
 namespace quandenser {
 
-const std::string DinosaurIO::kAdvancedParamFile = std::string(JAR_PATH) + std::string("advParams_dinosaur_targeted.txt");
-const std::string DinosaurIO::kDinosaurJar = std::string(JAR_PATH) + std::string("Dinosaur-1.1.3.free.jar");
+const std::string DinosaurIO::kAdvancedParamFile = "\"" + Globals::getJarPath() + std::string("advParams_dinosaur_targeted.txt") + "\"";
+const std::string DinosaurIO::kDinosaurJar = "\"" + Globals::getJarPath() + std::string("Dinosaur-1.1.3.free.jar") + "\"";
 
 std::string DinosaurIO::javaMemory_ = "24000M";
 int DinosaurIO::javaNumThreads_ = 4;

@@ -1,0 +1,3 @@
+v0.02
+* Updated MaRaCluster and Proteowizard dependencies to latest version
+* Fixed building scripts for all platforms
