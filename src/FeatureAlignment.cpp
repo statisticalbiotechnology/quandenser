@@ -109,7 +109,7 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
   }
   addFeatureLinks(percolatorOutputFile, candidateFeaturesTargetRun,
                   featuresTargetRun, featureMatches_[filePair]);
-
+  
   if (linkPEPMbrSearchThreshold_ < 1.0) {
     std::string percolatorMbrOutputFile = percolatorOutputFileBaseFN_ +
       "/search_and_link_" +
@@ -240,6 +240,7 @@ void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
       if (targetFt.featureIdx < 0) {
         DinosaurFeature& candFt = candidateFeaturesTargetRun.at(
             getCandidatePos(targetFt.featureIdx));
+        candFt.featureIdx = featuresTargetRun.getFeatureIdx(candFt);
         if (candFt.featureIdx < 0) {
           candFt.featureIdx = featuresTargetRun.size();
           candFt.fileIdx = targetFileIdx;
@@ -436,9 +437,8 @@ void FeatureAlignment::processDinosaurTargets(
         precursorLinks.find(queryIt->featureIdx)->second.posteriorErrorProb >= linkPEPMbrSearchThreshold_) {
       getline(dinosaurOutputStream, targetLine);
       DinosaurFeature targetFeature = DinosaurIO::parseDinosaurFeatureRow(targetLine);
-      targetFeature.featureIdx = featuresTargetRun.getFeatureIdx(targetFeature);
       targetFeature.fileIdx = -1;
-      if (targetFeature.intensity > 0.0 && targetFeature.featureIdx == -1) {
+      if (targetFeature.intensity > 0.0) {
         targetFeature.featureIdx = candidateFeaturesTargetRun.getFeatureIdx(targetFeature);
         if (targetFeature.featureIdx == -1) {
           targetFeature.featureIdx = getCandidateIdx(candidateFeaturesTargetRun.size());
