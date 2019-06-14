@@ -22,6 +22,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <limits>
 
 #include <boost/filesystem.hpp>
 
@@ -82,7 +83,8 @@ class Quandenser {
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap);
 
-  void loadFeatures(std::vector<DinosaurFeatureList>& allFeatures);
+  void loadFeatures(const std::string& featureOutFile,
+    std::vector<DinosaurFeatureList>& allFeatures);
 
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;

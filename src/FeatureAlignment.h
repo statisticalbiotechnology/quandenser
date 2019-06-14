@@ -67,7 +67,7 @@ class FeatureAlignment {
     percolatorArgs_(percolatorArgs),
     ppmTol_(ppmTol), rTimeStdevTol_(rTimeStdevTol),
     linkPEPThreshold_(linkPEPThreshold),
-    linkPEPMbrSearchThreshold_(linkPEPMbrSearchThreshold_),
+    linkPEPMbrSearchThreshold_(linkPEPMbrSearchThreshold),
     maxFeatureCandidates_(maxFeatureCandidates) {}
 
   void matchFeatures(
