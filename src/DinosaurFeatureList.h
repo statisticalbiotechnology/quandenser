@@ -67,6 +67,8 @@ class DinosaurFeatureList {
   inline iterator end() { return features_.end(); }
   inline const_iterator begin() const { return features_.begin(); }
   inline const_iterator end() const { return features_.end(); }
+  inline std::vector<DinosaurFeature>& getFeatureList() { return features_; }
+  inline const std::vector<DinosaurFeature>& getFeatureList() const { return features_; }
   inline size_t size() const { return features_.size(); }
   inline void clear() { return features_.clear(); }
   inline void push_back(const DinosaurFeature& ft) { 

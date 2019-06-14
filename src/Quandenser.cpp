@@ -344,33 +344,6 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   clusterFilePath = maraclusterAdapter.getClusterFileName();
 }
 
-void Quandenser::loadFeatures(const std::string& featureOutFile, std::vector<DinosaurFeatureList>& allFeatures) {
-  std::ifstream infile(featureOutFile.c_str(), ios::in);
-  std::string line;
-  while (std::getline(infile, line)) {
-    std::istringstream iss(line);
-    int DinosaurFeatureList_size;
-    iss >> DinosaurFeatureList_size;
-    DinosaurFeatureList ft_list;
-    for(int i = 0; i < DinosaurFeatureList_size; i++){
-      std::getline(infile, line);
-      std::istringstream iss(line);
-      DinosaurFeature ft;
-      float precMz, rTime, intensity, rtStart, rtEnd;
-      iss >> precMz >> rTime >> intensity >> rtStart >> rtEnd;
-      int charge, fileIdx, featureIdx;
-      iss >> charge >> fileIdx >> featureIdx;
-      ft.precMz = precMz; ft.rTime = rTime; ft.intensity = intensity; ft.rtStart = rtStart; ft.rtEnd = rtEnd;
-      ft.charge = charge; ft.fileIdx = fileIdx; ft.featureIdx = featureIdx;
-      ft_list.push_back(ft);
-    }
-    if (Globals::VERB > 2) {
-      std::cerr << "Read in " << ft_list.size() << " features." << std::endl;
-    }
-    allFeatures.push_back(ft_list);
-  }
-}
-
 int Quandenser::run() {
   time_t startTime;
   clock_t startClock;
@@ -435,13 +408,21 @@ int Quandenser::run() {
   }
   
   boost::filesystem::path featureOutFile(outputFolder_);
-  featureOutFile /= "dinosaur/allFeatures.tsv";
+  featureOutFile /= "dinosaur/allFeatures";
 
   std::vector<DinosaurFeatureList> allFeatures;
-  if (parallel_3_ || parallel_4_) {  // Save for future, you need to load everything perfectly here
+  if (parallel_3_ || parallel_4_) {
     // Load features from file
     std::cout << "Parallel 3/4: Loading dinosaur features from Parallel-2" << std::endl;
-    loadFeatures(featureOutFile.string(), allFeatures);
+    size_t fileIdx = 0u;
+    for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
+      DinosaurFeatureList ftList;
+      allFeatures.push_back(ftList);
+      std::string featureListFile(featureOutFile.string() + "." + boost::lexical_cast<std::string>(fileIdx) + ".dat");
+      maracluster::BinaryInterface::read(featureListFile, allFeatures.at(fileIdx).getFeatureList());
+      std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
+      ++fileIdx;
+    }
     std::cout << "Parallel 3/4: Loading completed" << std::endl;
   } else {
     size_t fileIdx = 0u;
@@ -462,19 +443,12 @@ int Quandenser::run() {
   if (parallel_2_) {
     // Save features from dinosaur
     std::cout << "Parallel 2: Saving dinosaur features" << std::endl;
-    std::ofstream outfile(featureOutFile.string().c_str(), ios::out);
-    outfile << std::setprecision(std::numeric_limits<long double>::digits10 + 1);
-    for (int allFeatures_index = 0; allFeatures_index < allFeatures.size(); allFeatures_index++) {
-      DinosaurFeatureList ft_list = allFeatures[allFeatures_index];
-      outfile << ft_list.size() << std::endl;
-      for (std::vector<DinosaurFeature>::iterator it = ft_list.begin(); it != ft_list.end(); ++it){
-        DinosaurFeature ft = *it;
-        outfile << ft.precMz << '\t' << ft.rTime << '\t' << ft.intensity << '\t' << ft.rtStart
-        << '\t' << ft.rtEnd << '\t' << ft.charge << '\t' << ft.fileIdx << '\t' << ft.featureIdx
-        << std::endl;
-      }
+    for (size_t allFeaturesIdx = 0u; allFeaturesIdx < allFeatures.size(); allFeaturesIdx++) {
+      DinosaurFeatureList ftList = allFeatures.at(allFeaturesIdx);
+      bool append = false;
+      std::string featureListFile(featureOutFile.string() + "." + boost::lexical_cast<std::string>(allFeaturesIdx) + ".dat");
+      maracluster::BinaryInterface::write(ftList.getFeatureList(), featureListFile, append);
     }
-    outfile.close();
     std::cout << "Parallel 2: Save completed" << std::endl;
   }
 

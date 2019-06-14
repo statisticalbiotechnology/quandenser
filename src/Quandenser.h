@@ -28,6 +28,7 @@
 
 #include "maracluster/src/Globals.h"
 #include "maracluster/src/SpectrumFileList.h"
+#include "maracluster/src/BinaryInterface.h"
 
 #include "Globals.h"
 #include "Option.h"
