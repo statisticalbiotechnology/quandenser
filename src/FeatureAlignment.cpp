@@ -198,8 +198,8 @@ void FeatureAlignment::matchFeatures(
 
     int numAdded = 0;
     std::vector<FeatureFeatureMatch>::const_iterator ffmIt;
-    for (ffmIt = topTargets.begin();
-          ffmIt != topTargets.end() && numAdded <= maxFeatureCandidates_;
+    for (ffmIt = topTargets.begin(); 
+          ffmIt != topTargets.end() && numAdded < maxFeatureCandidates_; 
           ++ffmIt, ++numAdded) {
       addLinkPsm(ffmIt->label, ffmIt->queryFeature, ffmIt->targetFeature,
                  percolatorAdapter);
