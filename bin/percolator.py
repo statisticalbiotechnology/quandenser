@@ -10,6 +10,8 @@ import sys
 import csv
 import collections
 
+from triqler import parsers
+
 PercolatorPoutPsmsBase = collections.namedtuple("PercolatorPoutPsms", "id filename scannr charge svm_score qvalue PEP peptide proteins")
 
 class PercolatorPoutPsms(PercolatorPoutPsmsBase):
@@ -21,7 +23,7 @@ class PercolatorPoutPsms(PercolatorPoutPsmsBase):
   
 # works for peptide and psms pouts
 def parsePsmsPout(poutFile, qThresh = 1.0, proteinMap = None, parseId = True, fixScannr = False):
-  reader = csv.reader(open(poutFile, 'r'), delimiter='\t')
+  reader = parsers.getTsvReader(poutFile)
   headers = next(reader) # save the header
   
   cruxOutput = True if "percolator score" in headers else False
