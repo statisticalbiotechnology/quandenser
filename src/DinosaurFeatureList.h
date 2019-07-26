@@ -90,7 +90,9 @@ class DinosaurFeatureList {
   inline void sortByPrecMz() { std::sort(features_.begin(), features_.end(), lessPrecMz); }
   inline void sortByFeatureIdx() { std::sort(features_.begin(), features_.end(), lessFeatureIdx); }
 
-  inline static bool lessPrecMz(const DinosaurFeature& a, const DinosaurFeature& b) { return (a.precMz < b.precMz); }
+  inline static bool lessPrecMz(const DinosaurFeature& a, const DinosaurFeature& b) { 
+    return (a.precMz < b.precMz) || (a.precMz == b.precMz && a.rTime < b.rTime); 
+  }
   inline static bool lessFeatureIdx(const DinosaurFeature& a, const DinosaurFeature& b) { return (a.featureIdx < b.featureIdx); }
   inline std::vector<DinosaurFeature>::const_iterator getPrecMzIterator(float precMz) const {
     return std::lower_bound(begin(), end(), precMz, DinosaurFeatureLessPrecMzLower());

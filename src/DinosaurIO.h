@@ -39,6 +39,9 @@ class DinosaurIO {
   static void setJavaNumThreads(int numThreads) {
     javaNumThreads_ = numThreads;
   }
+  static void setSeed(int seed) {
+    seed_ = seed;
+  }
   
   static void parseDinosaurFeatureFile(std::istream& dataStream, int fileIdx, DinosaurFeatureList& dinosaurFeatures);
   static int runDinosaurGlobal(const std::string& outputDir, const std::string& mzMLFile);
@@ -51,6 +54,7 @@ class DinosaurIO {
   
   static std::string javaMemory_;
   static int javaNumThreads_;
+  static int seed_;
   
     
 };

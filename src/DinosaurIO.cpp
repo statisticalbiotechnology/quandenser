@@ -24,6 +24,7 @@ const std::string DinosaurIO::kDinosaurJar = "\"" + Globals::getJarPath() + std:
 
 std::string DinosaurIO::javaMemory_ = "24000M";
 int DinosaurIO::javaNumThreads_ = 4;
+int DinosaurIO::seed_ = 1;
 
 void DinosaurIO::setJavaMemory(std::string mem) {
   char lastChar = std::tolower(*mem.rbegin());
@@ -47,7 +48,11 @@ int DinosaurIO::runDinosaurTargeted(const std::string& outputDir, const std::str
 }
 
 int DinosaurIO::runDinosaur(const std::string& dinosaurCmd) {
-  std::string cmd = "java -Xmx" + javaMemory_ + " -jar " + kDinosaurJar + " --force --concurrency=" + boost::lexical_cast<std::string>(javaNumThreads_) + " --profiling=true --nReport=0 " + dinosaurCmd;
+  std::string cmd = "java -Xmx" + javaMemory_ + " -jar " + kDinosaurJar +
+      " --force  --profiling=true --nReport=0 " +
+      " --concurrency=" + boost::lexical_cast<std::string>(javaNumThreads_) +
+      " --seed=" + boost::lexical_cast<std::string>(seed_) + " " + 
+      dinosaurCmd;
   if (Globals::VERB > 2) {
     std::cerr << cmd << std::endl;
   }
@@ -66,17 +71,25 @@ void DinosaurIO::parseDinosaurFeatureFile(std::istream& dataStream, int fileIdx,
   
   getline(dataStream, featureLine); // skip header
   size_t lineNr = 2;
+  std::vector<DinosaurFeature> ftVec;
   while (getline(dataStream, featureLine)) {
     if (lineNr % 1000000 == 0 && Globals::VERB > 1) {
       std::cerr << "Processing line " << lineNr << std::endl;
     }
     DinosaurFeature ft = parseDinosaurFeatureRow(featureLine);
-    ft.featureIdx = lineNr - 2;
-    ft.fileIdx = fileIdx;
-    
-    dinosaurFeatures.push_back(ft);
+    ftVec.push_back(ft);
     
     ++lineNr;
+  }
+  
+  std::sort(ftVec.begin(), ftVec.end(), DinosaurFeatureList::lessPrecMz);
+  
+  size_t ftIdx = 0;
+  for (std::vector<DinosaurFeature>::iterator it = ftVec.begin(); it != ftVec.end(); ++it, ++ftIdx) {
+    it->featureIdx = ftIdx;
+    it->fileIdx = fileIdx;
+    
+    dinosaurFeatures.push_back(*it);
   }
 }
 

@@ -64,6 +64,7 @@ class Quandenser {
   std::string outputSpectrumFile_;
   std::string fnPrefix_;
   
+  int seed_;
   int maxMissingValues_;
   float intensityScoreThreshold_;
   
