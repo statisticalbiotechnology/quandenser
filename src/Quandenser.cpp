@@ -406,7 +406,7 @@ int Quandenser::run() {
     std::cout << "Parallel stop 1 reached" << std::endl;
     return EXIT_SUCCESS;
   }
-  
+
   boost::filesystem::path featureOutFile(outputFolder_);
   featureOutFile /= "dinosaur/allFeatures";
 
@@ -463,7 +463,7 @@ int Quandenser::run() {
   AlignRetention alignRetention;
   std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
   MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
-  
+
   boost::filesystem::path featureAlignFile(outputFolder_);
   featureAlignFile /= "maracluster/featureAlignmentQueue.txt";
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
@@ -551,8 +551,8 @@ int Quandenser::run() {
   SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
   runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures, clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures);
   if (parallel_4_) {
-    std::cout << "Parallel stop 4 reached" << std::endl;
-    return EXIT_SUCCESS;
+    //std::cout << "Parallel stop 4 reached" << std::endl;
+    //return EXIT_SUCCESS;
   }
 
   /* sort features by index before feature groups processing */
