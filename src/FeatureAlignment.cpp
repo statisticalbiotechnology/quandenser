@@ -45,34 +45,11 @@ void FeatureAlignment::matchFeatures(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
-    std::vector<DinosaurFeatureList>& allFeatures,
-    int parallel_3_) {
+    std::vector<DinosaurFeatureList>& allFeatures) {
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
-  int loop_counter = 0;  // Used for parallelization
   for (filePairIt = featureAlignmentQueue.begin();
         filePairIt != featureAlignmentQueue.end(); ++filePairIt) {
     FilePair filePair = filePairIt->second;
-
-    // Parallel_3 injection. Will only run a pair if it exists in pair/ folder and is as assigned round
-    // NOTE: In AlignRetention.cpp, line 197: A run is limited by which round it is, needs to be in order
-    if (parallel_3_) {  // parallell_3_ is not 0. Will add +1 when inserting it
-      boost::filesystem::path file1(fileList.getFilePath(filePair.fileIdx1));
-      boost::filesystem::path file2(fileList.getFilePath(filePair.fileIdx2));
-      // Check if the pair assigned exists in the pair folder
-      if (boost::filesystem::exists("pair/file1/" + file1.filename().string()) &&
-          boost::filesystem::exists("pair/file2/" + file2.filename().string())) {  // -1 because parallell_3_ is added +1 from actual depth
-            std::cout << "MATCHED " << fileList.getFilePath(filePair.fileIdx1)
-            << " and " << fileList.getFilePath(filePair.fileIdx2) << std::endl;
-            loop_counter++;
-      // If not, check how many previously proceesed file we have completed
-      } else if (loop_counter < parallel_3_ - 1) {
-        // pass
-        loop_counter++;
-      } else {
-        continue;
-        loop_counter++;
-      }
-    }
 
     if (Globals::VERB > 1) {
       std::cerr << "Matching features " << filePair.fileIdx1

@@ -74,8 +74,7 @@ class FeatureAlignment {
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
-    std::vector<DinosaurFeatureList>& allFeatures,
-    int parallel_3_);
+    std::vector<DinosaurFeatureList>& allFeatures);
 
   std::map<FilePair, std::map<int, FeatureIdxMatch> >& getFeatureMatches() {
     return featureMatches_;
