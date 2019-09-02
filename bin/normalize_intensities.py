@@ -64,7 +64,7 @@ def normalizeIntensitiesWithFactorArrays(clusterQuantExtraFile, rTimeFactorArray
   for key in rTimeFactorArrays:
     rTimeArrays[key], factorArrays[key] = zip(*rTimeFactorArrays[key])
   print("Writing", clusterQuantExtraNormalizedFile)
-  writer = csv.writer(open(clusterQuantExtraNormalizedFile, 'w'), delimiter = '\t')
+  writer = parsers.getTsvWriter(clusterQuantExtraNormalizedFile)
   precClusters = parsers.parseFeatureClustersFile(clusterQuantExtraFile)
   for i, precCluster in enumerate(precClusters):
     for row in precCluster:

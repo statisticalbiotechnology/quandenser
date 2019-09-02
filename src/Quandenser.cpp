@@ -18,7 +18,7 @@
 
 namespace quandenser {
 
-Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"),
+Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
     maxMissingValues_(-1), intensityScoreThreshold_(0.5),
     spectrumBatchFileFN_(""), outputFolder_("Quandenser_output"),
     outputSpectrumFile_(""), maraclusterPpmTol_(20.0f),
@@ -85,6 +85,10 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "output-folder",
       "Writable folder for output files (default: 'Quandenser_output')",
       "path");
+  cmd.defineOption("s",
+      "seed",
+      "Seed for pseudo random number generators of Dinosaur and Percolator (default: 1)",
+      "int");
   cmd.defineOption("a",
       "prefix",
       "Output files will be prefixed as e.g. <prefix>.clusters_p10.tsv (default: 'Quandenser')",
@@ -182,7 +186,14 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   if (cmd.optionSet("output-folder")) {
     outputFolder_ = cmd.options["output-folder"];
   }
-
+  
+  if (cmd.optionSet("seed")) {
+    int seed = cmd.getInt("seed", 1, 20000); // [1,20000] are Percolator's limits for the seed
+    percolatorArgs_.push_back("--seed");
+    percolatorArgs_.push_back(cmd.options["seed"]);
+    DinosaurIO::setSeed(seed);
+  }
+  
   if (cmd.optionSet("spec-out")) {
     outputSpectrumFile_ = cmd.options["spec-out"];
   }
@@ -362,9 +373,15 @@ int Quandenser::run() {
     std::cerr << "Error: could not create output directory at " << outputFolder_ << std::endl;
     return EXIT_FAILURE;
   }
+  
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
-
+  
+  if (fileList.size() <= 2u) {
+    std::cerr << "Error: less than 2 spectrum files were specified, Quandenser needs at least two files to perform a meaningful alignment." << std::endl;
+    return EXIT_FAILURE;
+  }
+  
   boost::filesystem::path dinosaurFolder(rootPath);
   dinosaurFolder /= "dinosaur";
   boost::filesystem::create_directories(dinosaurFolder, returnedError);

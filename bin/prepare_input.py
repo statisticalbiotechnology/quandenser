@@ -31,8 +31,9 @@ def main(argv):
   
   simpleOutputFormat = False # skips the linkPEP column from Quandenser output
   skipNormalization = False # skips retention time based feature intensity normalization
+  retainUnidentified = False # keeps features without identification in the Triqler input file
   try:
-    opts, args = getopt.getopt(argv,"hi:l:o:f:q:e:sn",["ifile=","filelist=","featurefile=","simple_output=","no_normalization="])
+    opts, args = getopt.getopt(argv,"hi:l:o:f:q:e:snu",["ifile=","filelist=","featurefile=","simple_output=","no_normalization=","retain_unidentified"])
   except getopt.GetoptError:
     print(helpMessage)
     sys.exit(2)
@@ -50,17 +51,25 @@ def main(argv):
       simpleOutputFormat = True
     elif opt in ("-n", "--no_normalization"):
       skipNormalization = True
+    elif opt in ("-u", "retain_unidentified"):
+      retainUnidentified = True
     elif opt in ("-q"):
       peptQuantRowFile = arg
   
   if not skipNormalization:
     clusterQuantFileNormalized = clusterQuantFile.replace(".tsv", ".normalized.tsv")
     if not os.path.isfile(clusterQuantFileNormalized):
+      print("Applying retention-time dependent intensity normalization")
       normalize.normalizeIntensitiesRtimeBased(clusterQuantFile, clusterQuantFileNormalized)
+    else:
+      print("Reusing previously generated normalized feature group file:", clusterQuantFileNormalized, ". Remove this file to redo normalization")
     clusterQuantFile = clusterQuantFileNormalized
+  else:
+    print("Skipping retention-time dependent intensity normalization")
   
   params = dict()
   params['simpleOutputFormat'] = simpleOutputFormat
+  params['retainUnidentified'] = retainUnidentified
   fileList, params['groups'], params['groupLabels'] = parsers.parseFileList(fileListFile)
   specToPeptideMap = parsePsmsPoutFiles(psmsOutputFiles)
   
@@ -85,7 +94,7 @@ def printTriqlerInputFile(fileList, clusterQuantFile, quantRowFile, specToPeptid
   
   fileNameConditionPairs = [[x.split("/")[-1], parsers.getGroupLabel(idx, params['groups'], params['groupLabels'])] for idx, x in enumerate(fileList)]
   
-  writer = csv.writer(open(quantRowFile, 'w'), delimiter = '\t')
+  writer = parsers.getTsvWriter(quantRowFile)
   if params['simpleOutputFormat']:
     writer.writerow(parsers.TriqlerSimpleInputRowHeaders)
   else:
@@ -103,7 +112,7 @@ def printTriqlerInputFile(fileList, clusterQuantFile, quantRowFile, specToPeptid
       for peptLinkPEP in pc.peptLinkPEPs.split(","):
         spectrumIdx, linkPEP = parsePeptideLinkPEP(peptLinkPEP)
         peptide, identPEP, proteins, searchScore, charge = specToPeptideMap(spectrumIdx)
-        if pc.intensity > 0.0 and linkPEP < 1.0:
+        if pc.intensity > 0.0 and linkPEP < 1.0 and (params["retainUnidentified"] or peptide != "NA"):
           # run condition charge spectrumId linkPEP featureClusterId search_score intensity peptide proteins
           run, condition = fileNameConditionPairs[fileIdx]
           row = parsers.TriqlerInputRow(run, condition, charge, spectrumIdx, linkPEP, featureClusterIdx, searchScore, pc.intensity, peptide, proteins)

@@ -47,13 +47,16 @@ void FeatureAlignment::matchFeatures(
     AlignRetention& alignRetention,
     std::vector<DinosaurFeatureList>& allFeatures) {
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
-  for (filePairIt = featureAlignmentQueue.begin();
-        filePairIt != featureAlignmentQueue.end(); ++filePairIt) {
+  size_t alignmentCnt = 1u;
+  for (filePairIt = featureAlignmentQueue.begin(); 
+        filePairIt != featureAlignmentQueue.end(); ++filePairIt, ++alignmentCnt) {
     FilePair filePair = filePairIt->second;
 
     if (Globals::VERB > 1) {
-      std::cerr << "Matching features " << filePair.fileIdx1
-                << "->" << filePair.fileIdx2 << std::endl;
+      std::cerr << "Matching features " << filePair.fileIdx1 
+                << "->" << filePair.fileIdx2 
+                << " (" << alignmentCnt << "/" 
+                << featureAlignmentQueue.size() << ")" << std::endl;
     }
     std::string targetMzMLFile = fileList.getFilePath(filePair.fileIdx2);
     getFeatureMap(filePair, targetMzMLFile,
@@ -150,7 +153,11 @@ void FeatureAlignment::matchFeatures(
   percolatorArgs.push_back(percolatorOutputFile);
   percolatorArgs.push_back("--decoy-results-psms");
   percolatorArgs.push_back(percolatorOutputFile + ".decoys");
-
+  /*
+  percolatorArgs.push_back("--tab-out");
+  percolatorArgs.push_back(percolatorOutputFile + ".pin");
+  */
+  
   PercolatorAdapter percolatorAdapter;
   percolatorAdapter.parseOptions(percolatorArgs);
   percolatorAdapter.init(kLinkFeatureNames);
