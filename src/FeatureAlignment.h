@@ -74,7 +74,8 @@ class FeatureAlignment {
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
-    std::vector<DinosaurFeatureList>& allFeatures);
+    std::vector<DinosaurFeatureList>& allFeatures,
+    const std::string& addedFeaturesFile);
 
   std::map<FilePair, std::map<int, FeatureIdxMatch> >& getFeatureMatches() {
     return featureMatches_;
@@ -97,13 +98,15 @@ class FeatureAlignment {
     const std::string& targetMzMLFile,
     SplineRegression& alignment,
     DinosaurFeatureList& featuresQueryRun,
-    DinosaurFeatureList& featuresTargetRun);
+    DinosaurFeatureList& featuresTargetRun,
+    const std::string& addedFeaturesFile);
 
   void insertPlaceholderFeatures(
     const DinosaurFeatureList& featuresQueryRun,
     const std::vector<double>& predictedRTimesTargetRun,
     DinosaurFeatureList& featuresTargetRun,
-    std::map<int, FeatureIdxMatch>& precursorLinks);
+    std::map<int, FeatureIdxMatch>& precursorLinks,
+    const std::string& addedFeaturesFile);
 
   void matchFeatures(
     const std::string& percolatorOutputFile,
@@ -115,7 +118,8 @@ class FeatureAlignment {
   void addFeatureLinks(const std::string& percolatorOutputFile,
     DinosaurFeatureList& candidateFeaturesTargetRun,
     DinosaurFeatureList& featuresTargetRun,
-    std::map<int, FeatureIdxMatch>& precursorLinks);
+    std::map<int, FeatureIdxMatch>& precursorLinks,
+    const std::string& addedFeaturesFile);
 
   void findMatches(int label, double rTimeTol,
     const DinosaurFeatureList& featuresTargetRun,

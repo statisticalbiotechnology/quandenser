@@ -28,7 +28,6 @@
 
 #include "maracluster/src/Globals.h"
 #include "maracluster/src/SpectrumFileList.h"
-#include "maracluster/src/BinaryInterface.h"
 
 #include "Globals.h"
 #include "Option.h"
@@ -83,10 +82,12 @@ class Quandenser {
     const std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap);
-
-  void loadFeatures(const std::string& featureOutFile,
-    std::vector<DinosaurFeatureList>& allFeatures);
-
+  
+  std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
+                           size_t fileIdx);
+  std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
+                           size_t fileIdx1, size_t fileIdx2);
+  
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;
 };

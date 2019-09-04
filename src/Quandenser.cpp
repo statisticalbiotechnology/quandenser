@@ -355,6 +355,20 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   clusterFilePath = maraclusterAdapter.getClusterFileName();
 }
 
+std::string Quandenser::getFeatureFN(
+    const boost::filesystem::path& featureOutFile, size_t fileIdx) {
+  return featureOutFile.string() + "." + 
+    boost::lexical_cast<std::string>(fileIdx) + ".dat";
+}
+
+std::string Quandenser::getFeatureFN(
+    const boost::filesystem::path& featureOutFile, 
+    size_t fileIdx1, size_t fileIdx2) {
+  return featureOutFile.string() + "." + 
+    boost::lexical_cast<std::string>(fileIdx1) + "_" + 
+    boost::lexical_cast<std::string>(fileIdx2) + ".dat";
+}
+
 int Quandenser::run() {
   time_t startTime;
   clock_t startClock;
@@ -377,7 +391,7 @@ int Quandenser::run() {
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
   
-  if (fileList.size() <= 2u) {
+  if (fileList.size() <= 2u && !parallel_1_) {
     std::cerr << "Error: less than 2 spectrum files were specified, Quandenser needs at least two files to perform a meaningful alignment." << std::endl;
     return EXIT_FAILURE;
   }
@@ -425,7 +439,7 @@ int Quandenser::run() {
   }
 
   boost::filesystem::path featureOutFile(outputFolder_);
-  featureOutFile /= "dinosaur/allFeatures";
+  featureOutFile /= "dinosaur/features";
 
   std::vector<DinosaurFeatureList> allFeatures;
   if (!parallel_3_ && !parallel_4_) {
@@ -447,9 +461,9 @@ int Quandenser::run() {
       std::cout << "Parallel 2: Saving dinosaur features" << std::endl;
       for (size_t allFeaturesIdx = 0u; allFeaturesIdx < allFeatures.size(); allFeaturesIdx++) {
         DinosaurFeatureList ftList = allFeatures.at(allFeaturesIdx);
+        std::string featureListFile = getFeatureFN(featureOutFile, allFeaturesIdx);
         bool append = false;
-        std::string featureListFile(featureOutFile.string() + "." + boost::lexical_cast<std::string>(allFeaturesIdx) + ".dat");
-        maracluster::BinaryInterface::write(ftList.getFeatureList(), featureListFile, append);
+        ftList.saveToFile(featureListFile, append);
       }
       std::cout << "Parallel 2: Save completed" << std::endl;
     }
@@ -459,9 +473,16 @@ int Quandenser::run() {
     for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
       DinosaurFeatureList ftList;
       allFeatures.push_back(ftList);
-      std::string featureListFile(featureOutFile.string() + "." + boost::lexical_cast<std::string>(fileIdx) + ".dat");
-      maracluster::BinaryInterface::read(featureListFile, allFeatures.at(fileIdx).getFeatureList());
-      std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
+      boost::filesystem::path ftFilePath(fileList.getFilePath(fileIdx));
+      std::string fn(ftFilePath.filename().string());
+      // Check if the pair assigned exists in the pair folder
+      if (boost::filesystem::exists("pair/file1/" + fn) ||
+          boost::filesystem::exists("pair/file2/" + fn) || 
+          parallel_4_) {
+        std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
+        size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile);
+        std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
+      }
       ++fileIdx;
     }
     std::cout << "Parallel 3/4: Loading completed" << std::endl;
@@ -476,13 +497,14 @@ int Quandenser::run() {
   runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath, spectrumToPrecursorMap);
 
   AlignRetention alignRetention;
-  std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
-  MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
-
   boost::filesystem::path featureAlignFile(outputFolder_);
   featureAlignFile /= "maracluster/featureAlignmentQueue.txt";
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
-  if (!parallel_3_ || parallel_3_ == 99999 || !parallel_4_) {
+  std::string addedFeaturesFile = "";
+  if (!parallel_3_ && !parallel_4_) {
+    std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
+    MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
+    
     alignRetention.getAlignModelsTree();
     alignRetention.createMinDepthTree(featureAlignmentQueue);
     
@@ -516,28 +538,40 @@ int Quandenser::run() {
     // Load state of featureAlignmentQueue
     std::ifstream infile(featureAlignFile.string().c_str(), ios::in);
     int round;
-    string file1;
-    string file2;
-    int fileidx1;
-    int fileidx2;
+    std::string tmp1, tmp2;
+    int fileidx1, fileidx2;
     int loop_counter = 0;  // Used for parallelization
-    while (infile >> round >> file1 >> file2 >> fileidx1 >> fileidx2) {
+    std::vector<bool> featuresAdded(fileList.size());
+    while (infile >> round >> tmp1 >> tmp2 >> fileidx1 >> fileidx2) {
       FilePair filePair(fileidx1, fileidx2);
+      
+      boost::filesystem::path file1(fileList.getFilePath(fileidx1));
+      boost::filesystem::path file2(fileList.getFilePath(fileidx2));
+      std::string fn1(file1.filename().string());
+      std::string fn2(file2.filename().string());
       
       // Parallel_3 injection. Will only run a pair if it exists in pair/ folder and is as assigned round
       // NOTE: In AlignRetention.cpp, line 197: A run is limited by which round it is, needs to be in order
-      boost::filesystem::path file1(fileList.getFilePath(filePair.fileIdx1));
-      boost::filesystem::path file2(fileList.getFilePath(filePair.fileIdx2));
-      // Check if the pair assigned exists in the pair folder
-      if ((boost::filesystem::exists("pair/file1/" + file1.filename().string()) &&
-           boost::filesystem::exists("pair/file2/" + file2.filename().string())) ||
-          loop_counter < parallel_3_ - 1) {  // -1 because parallel_3_ is added +1 from actual depth
+      if (parallel_4_) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
+      } else if (boost::filesystem::exists("pair/file1/" + fn1) &&
+                 boost::filesystem::exists("pair/file2/" + fn2)) {
+        featureAlignmentQueue.push_back(std::make_pair(round, filePair));
+        addedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
+        if (featuresAdded[fileidx1]) allFeatures.at(fileidx1).sortByPrecMz();
+        if (featuresAdded[fileidx2]) allFeatures.at(fileidx2).sortByPrecMz();
+      } else if (loop_counter < parallel_3_ - 1 &&  // -1 because parallel_3_ is added +1 from actual depth        
+          (boost::filesystem::exists("pair/file1/" + fn2) ||
+           boost::filesystem::exists("pair/file2/" + fn2))) {
+        std::string savedAddedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
+        size_t addedFts = allFeatures.at(fileidx2).loadFromFile(savedAddedFeaturesFile);
+        std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile << std::endl;
+        featuresAdded[fileidx2] = true;
       }
       loop_counter++;
     }
     infile.close();
-
+    
     // Load state of alignRetention
     alignRetention.LoadState();
     std::cout << "Parallel 3/4: Loading completed" << std::endl;
@@ -561,11 +595,9 @@ int Quandenser::run() {
       percolatorOutputFileBaseFN, percolatorArgs_,
       alignPpmTol_, alignRTimeStdevTol_, linkPEPThreshold_,
       linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
-
-  // Note: You COULD parallelize this (I've tested it), but since the mapping is so fast, it is not worth it
-  // when running on a cluster, since you have to submit a job for each process.
-  // Note on previous note: If there are large files, this is also slow, so why not parallelize it too? :)
-  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures);
+  
+  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile);
+  
   if (parallel_3_) {  // parallel 3 runs dinosaur.
     std::cout << "Parallel stop 3 reached" << std::endl;
     return EXIT_SUCCESS;

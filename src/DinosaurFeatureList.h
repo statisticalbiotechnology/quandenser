@@ -22,7 +22,7 @@
 
 #include <boost/unordered/unordered_map.hpp>
 
-#include "percolator/src/DataSet.h"
+#include "maracluster/src/BinaryInterface.h"
 
 #include "Globals.h"
 #include "DinosaurFeature.h"
@@ -87,6 +87,22 @@ class DinosaurFeatureList {
     } else {
       return -1;
     }
+  }
+  
+  size_t loadFromFile(const std::string& ftFile) {
+    std::vector<DinosaurFeature> addedFts;
+    maracluster::BinaryInterface::read(ftFile, addedFts);
+    for (DinosaurFeature& df : addedFts) {
+      if (getFeatureIdx(df) == -1) { // this mimicks the MBR feature adding
+        df.featureIdx = size(); // re-index before adding to the featurelist
+        push_back(df);
+      }
+    }
+    return addedFts.size();
+  }
+  
+  void saveToFile(const std::string& ftFile, bool append) {
+    maracluster::BinaryInterface::write(features_, ftFile, append);
   }
   
   inline void sortByPrecMz() { std::sort(features_.begin(), features_.end(), lessPrecMz); }

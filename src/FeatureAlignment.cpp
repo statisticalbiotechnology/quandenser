@@ -45,7 +45,8 @@ void FeatureAlignment::matchFeatures(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
-    std::vector<DinosaurFeatureList>& allFeatures) {
+    std::vector<DinosaurFeatureList>& allFeatures,
+    const std::string& addedFeaturesFile) {
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   size_t alignmentCnt = 1u;
   for (filePairIt = featureAlignmentQueue.begin(); 
@@ -62,7 +63,8 @@ void FeatureAlignment::matchFeatures(
     getFeatureMap(filePair, targetMzMLFile,
         alignRetention.getAlignment(filePair),
         allFeatures.at(filePair.fileIdx1),
-        allFeatures.at(filePair.fileIdx2));
+        allFeatures.at(filePair.fileIdx2),
+        addedFeaturesFile);
   }
 }
 
@@ -70,7 +72,8 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     const std::string& targetMzMLFile,
     SplineRegression& alignment,
     DinosaurFeatureList& featuresQueryRun,
-    DinosaurFeatureList& featuresTargetRun) {
+    DinosaurFeatureList& featuresTargetRun,
+    const std::string& addedFeaturesFile) {
   std::vector<double> rTimesQueryRun, predictedRTimesTargetRun;
   DinosaurFeatureList::const_iterator ftIt;
   for (ftIt = featuresQueryRun.begin(); ftIt != featuresQueryRun.end(); ++ftIt) {
@@ -88,7 +91,7 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
                  predictedRTimesTargetRun, rTimeStdev);
   }
   addFeatureLinks(percolatorOutputFile, candidateFeaturesTargetRun,
-                  featuresTargetRun, featureMatches_[filePair]);
+                  featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
   
   if (linkPEPMbrSearchThreshold_ < 1.0) {
     std::string percolatorMbrOutputFile = percolatorOutputFileBaseFN_ +
@@ -101,39 +104,52 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
         rTimeStdev, candidateFeaturesTargetRun);
 
     addFeatureLinks(percolatorMbrOutputFile, candidateFeaturesTargetRun,
-        featuresTargetRun, featureMatches_[filePair]);
+        featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
   }
-
+  
   insertPlaceholderFeatures(featuresQueryRun, predictedRTimesTargetRun,
-      featuresTargetRun, featureMatches_[filePair]);
-
-  featuresTargetRun.sortByPrecMz();
+      featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
 }
 
 void FeatureAlignment::insertPlaceholderFeatures(
     const DinosaurFeatureList& featuresQueryRun,
     const std::vector<double>& predictedRTimesTargetRun,
     DinosaurFeatureList& featuresTargetRun,
-    std::map<int, FeatureIdxMatch>& precursorLinks) {
+    std::map<int, FeatureIdxMatch>& precursorLinks,
+    const std::string& addedFeaturesFile) {
   DinosaurFeatureList::const_iterator queryIt;
   std::vector<double>::const_iterator predRTimeIt;
   int targetFileIdx = featuresTargetRun.begin()->fileIdx;
   size_t placeholdersAdded = 0u;
+  DinosaurFeatureList placeholderFeatures;
   for (queryIt = featuresQueryRun.begin(), predRTimeIt = predictedRTimesTargetRun.begin();
        queryIt != featuresQueryRun.end(); ++queryIt, ++predRTimeIt) {
     if (precursorLinks[queryIt->featureIdx].posteriorErrorProb > linkPEPThreshold_) {
       DinosaurFeature placeholderFt = *queryIt;
       placeholderFt.fileIdx = targetFileIdx;
-      placeholderFt.featureIdx = featuresTargetRun.size();
-      placeholderFt.intensity = 0.0;
       placeholderFt.rTime = *predRTimeIt;
-      featuresTargetRun.push_back(placeholderFt);
+      placeholderFt.featureIdx = featuresTargetRun.getFeatureIdx(placeholderFt);
+      placeholderFt.intensity = 0.0;
+      if (placeholderFt.featureIdx < 0) {
+        placeholderFt.featureIdx = featuresTargetRun.size();
+        featuresTargetRun.push_back(placeholderFt);
+        if (!addedFeaturesFile.empty()) {
+          placeholderFeatures.push_back(placeholderFt);
+        }
+      }
       precursorLinks[queryIt->featureIdx] =
           FeatureIdxMatch(placeholderFt.featureIdx, 1.0, placeholderFt.intensity);
       ++placeholdersAdded;
     }
   }
-
+  
+  if (addedFeaturesFile.empty()) {
+    featuresTargetRun.sortByPrecMz();
+  } else {
+    bool append = true;
+    placeholderFeatures.saveToFile(addedFeaturesFile, append);
+  }
+  
   if (Globals::VERB > 1) {
     std::cerr << "Added " << placeholdersAdded << " placeholders." << std::endl;
   }
@@ -197,12 +213,14 @@ void FeatureAlignment::matchFeatures(
 void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
     DinosaurFeatureList& candidateFeaturesTargetRun,
     DinosaurFeatureList& featuresTargetRun,
-    std::map<int, FeatureIdxMatch>& precursorLinks) {
+    std::map<int, FeatureIdxMatch>& precursorLinks,
+    const std::string& addedFeaturesFile) {
   std::ifstream dataStream(percolatorOutputFile.c_str(), ios::in);
 
   std::cerr << "Links before "<< precursorLinks.size() << std::endl;
 
   int targetFileIdx = featuresTargetRun.begin()->fileIdx;
+  DinosaurFeatureList addedTargetFeatures;
   std::string psmLine;
   getline(dataStream, psmLine); /* skip header */
   while (getline(dataStream, psmLine)) {
@@ -226,15 +244,23 @@ void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
             getCandidatePos(targetFt.featureIdx));
         candFt.featureIdx = featuresTargetRun.getFeatureIdx(candFt);
         if (candFt.featureIdx < 0) {
-          candFt.featureIdx = featuresTargetRun.size();
+          candFt.featureIdx = featuresTargetRun.size() + addedTargetFeatures.size();
           candFt.fileIdx = targetFileIdx;
           featuresTargetRun.push_back(candFt);
+          if (!addedFeaturesFile.empty()) {
+            addedTargetFeatures.push_back(candFt);
+          }
         }
         targetFt = candFt;
       }
       precursorLinks[queryFt.featureIdx] = FeatureIdxMatch(targetFt.featureIdx,
           posteriorErrorProb, targetFt.intensity);
     }
+  }
+  
+  if (!addedFeaturesFile.empty()) {
+    bool append = false;
+    addedTargetFeatures.saveToFile(addedFeaturesFile, append);
   }
 
   std::cerr << "Links after "<< precursorLinks.size() << std::endl;
