@@ -82,7 +82,7 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
   std::string percolatorOutputFile = percolatorOutputFileBaseFN_ + "/link_" + 
     boost::lexical_cast<std::string>(filePair.fileIdx1) + "_to_" + 
     boost::lexical_cast<std::string>(filePair.fileIdx2) + ".psms";
-  if (!Globals::fileExists(percolatorOutputFile)) {
+  if (Globals::fileIsEmpty(percolatorOutputFile)) {
     matchFeatures(percolatorOutputFile, featuresQueryRun, featuresTargetRun, 
                  predictedRTimesTargetRun, rTimeStdev);
   }
@@ -323,7 +323,7 @@ void FeatureAlignment::mbrMatchFeatures(
   
   /* TODO: put these in a separate folder */
   std::string targetFile = percolatorOutputFile + ".dinosaur_targets.tsv";
-  if (!boost::filesystem::exists(targetFile)) {
+  if (Globals::fileIsEmpty(targetFile)) {
     std::ofstream targetFileStream(targetFile.c_str(), ios::out);
     targetFileStream << "mz\tcharge\tmzDiff\trtStart\trtEnd\tminApexInt\tid" << std::endl;
     
@@ -354,7 +354,7 @@ void FeatureAlignment::mbrMatchFeatures(
   std::string outputDir = percolatorOutputFile + "_dinosaur"; /* TODO: put these in a separate folder */
   std::string dinosaurOutputFile = outputDir + "/" + 
       targetMzMLFilePath.stem().string() + ".targets.csv";
-  if (!boost::filesystem::exists(dinosaurOutputFile)) {
+  if (Globals::fileIsEmpty(dinosaurOutputFile)) {
     boost::filesystem::path dinosaurOutputDir(outputDir);
     boost::system::error_code returnedError;
     boost::filesystem::create_directories(dinosaurOutputDir, returnedError);
@@ -391,7 +391,7 @@ void FeatureAlignment::processDinosaurTargets(
   
   PercolatorAdapter percolatorAdapter;
   bool runPercolator = false;
-  if (!boost::filesystem::exists(percolatorOutputFile)) {
+  if (Globals::fileIsEmpty(percolatorOutputFile)) {
     runPercolator = true;
     percolatorArgs.push_back("--results-psms");
     percolatorArgs.push_back(percolatorOutputFile);

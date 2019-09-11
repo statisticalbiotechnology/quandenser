@@ -1,0 +1,1 @@
+hillPeakFactorMinLength=300

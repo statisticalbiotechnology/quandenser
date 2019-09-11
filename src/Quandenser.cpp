@@ -30,7 +30,7 @@ std::string Quandenser::greeter() {
   std::ostringstream oss;
   oss << "Quandenser version " << VERSION << ", ";
   oss << "Build Date " << __DATE__ << " " << __TIME__ << endl;
-  oss << "Copyright (c) 2015-17 Matthew The. All rights reserved.\n"
+  oss << "Copyright (c) 2018-19 Matthew The. All rights reserved.\n"
       << "Written by Matthew The (matthew.the@scilifelab.se) in the\n"
       << "School of Biotechnology at the Royal Institute of Technology in Stockholm.\n";
   return oss.str();

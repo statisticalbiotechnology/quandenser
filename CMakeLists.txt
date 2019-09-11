@@ -97,6 +97,7 @@ if(NOT "${MVN_RESULT}" STREQUAL "0")
 endif()
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.3.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.3.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt DESTINATION ${JAR_PATH})
 
 ###############################################################################
 # COMPILING QUANDENSER
