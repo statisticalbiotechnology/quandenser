@@ -299,7 +299,7 @@ for package_prefix in ${package_prefixes[@]}; do
     echo "Building of ${package_prefix} binaries succeeded"
   else
     echo "Building of ${package_prefix} binaries failed"
-    alive="1"
+    alive="2"
   fi
 done
 
@@ -308,8 +308,12 @@ done
 if [[ -z ${alive} ]]; then
   vagrant destroy -f
 else
-  echo "-a option set or encountered error: keeping the VM alive, remember to close and delete the VM manually."
-  exit 1
+  if [[ ${alive} == "2" ]]; then
+    echo "-a option set: keeping the VM alive, remember to close and delete the VM manually."
+  else
+    echo "encountered error: keeping the VM alive, remember to close and delete the VM manually."
+    exit 1
+  fi
 fi
 
 #---------------------------------------------------------------------------------------

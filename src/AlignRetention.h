@@ -23,6 +23,7 @@
 #include <queue>
 
 #include "SplineRegression.h"
+#include "MyException.h"
 
 namespace quandenser {
 

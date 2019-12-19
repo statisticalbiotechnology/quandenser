@@ -49,11 +49,16 @@ void AlignRetention::getAlignModelsTree() {
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx2);
     
     float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
-    sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
+    
+    if (!isinf(rmseComb) && !isnan(rmseComb)) {
+      sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
+    }
   }
+  int numFiles = maxFileIdx + 1;
+  
   std::sort(sortedWeights.begin(), sortedWeights.end());
   
-  for (int i = 0; i <= maxFileIdx; ++i) {
+  for (int i = 0; i < numFiles; ++i) {
     fileGraphNodes_.push_back(FileGraphNode(i));
   }
   
@@ -62,13 +67,15 @@ void AlignRetention::getAlignModelsTree() {
   if (sortedWeights.size() > 0) {
     addedNodes.insert(sortedWeights.front().second.fileIdx1);
   }
-  while (addedNodes.size() <= maxFileIdx) {
+  while (addedNodes.size() < numFiles && sortedWeights.size() > 0) {
+    bool inserted = false;
     for (std::vector<std::pair<float, FilePair> >::const_iterator it = sortedWeights.begin();
           it != sortedWeights.end(); ++it) {
       int fileIdx1 = it->second.fileIdx1;
       int fileIdx2 = it->second.fileIdx2;
       /* exactly 1 of the fileIdxs has to be in the addedNodes set */
       if ((addedNodes.find(fileIdx1) != addedNodes.end()) != (addedNodes.find(fileIdx2) != addedNodes.end())) {
+        inserted = true;
         addedNodes.insert(fileIdx1);
         addedNodes.insert(fileIdx2);
         fileGraphNodes_[fileIdx1].addNeighbor(fileIdx2);
@@ -78,12 +85,27 @@ void AlignRetention::getAlignModelsTree() {
         addedLinks.insert(it->second.getRevFilePair());
         
         if (Globals::VERB > 2) {
-          std::cerr << "Inserting link " << fileIdx1 << " to " << fileIdx2 << " with rmse " << it->first << std::endl;
+          std::cerr << "Inserting link " << fileIdx1 << " to " 
+                    << fileIdx2 << " with rmse " << it->first << std::endl;
         }
         
         break;
       }
     }
+    if (!inserted) break;
+  }
+  
+  if (addedNodes.size() != numFiles) {
+    std::ostringstream oss;
+    oss << "ERROR: Could not create minimum spanning tree for alignments." << std::endl
+        << "  Not enough overlap of MS2 clusters for the following runs:";
+    for (int i = 0; i < numFiles; ++i) {
+      if (addedNodes.find(i) == addedNodes.end()) {
+        oss << " " << i;
+      }
+    }
+    oss << std::endl << "  Terminating.." << std::endl;    
+    throw MyException(oss.str());
   }
   
   std::map<FilePair, SplineRegression>::iterator alignmentIt;
