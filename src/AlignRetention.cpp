@@ -170,8 +170,10 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
     //std::cerr << "a " << rtPair.rTime1 << " " << rtPair.rTime2 << std::endl;
     //medianRTimesRun1.push_back(rtPair.rTime1);
     //medianRTimesRun2.push_back(rtPair.rTime2);
-    medianRTimesRun1.push_back(rTimesRun1.at(medianIdx));
-    medianRTimesRun2.push_back(rTimesRun2.at(medianIdx));
+    if (medianRTimesRun1.size() == 0 || ( medianRTimesRun1.back() != rTimesRun1.at(medianIdx) && medianRTimesRun2.back() != rTimesRun2.at(medianIdx) ) ) {
+      medianRTimesRun1.push_back(rTimesRun1.at(medianIdx));
+      medianRTimesRun2.push_back(rTimesRun2.at(medianIdx));
+    }
     //std::cerr << "b " << medianRTimesRun1.back() << " " << medianRTimesRun2.back() << std::endl;
   }
 }

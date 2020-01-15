@@ -343,7 +343,7 @@ int Quandenser::run() {
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
   
-  if (fileList.size() <= 2u) {
+  if (fileList.size() < 2u) {
     std::cerr << "Error: less than 2 spectrum files were specified, Quandenser needs at least two files to perform a meaningful alignment." << std::endl;
     return EXIT_FAILURE;
   }
