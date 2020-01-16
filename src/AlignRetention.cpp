@@ -41,6 +41,8 @@ void AlignRetention::getAlignModelsTree() {
   RTimePairs::iterator filePairIt;
   std::vector<std::pair<float, FilePair> > sortedWeights;
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
+    if (alignments_.find(filePairIt->first) == alignments_.end()) continue;
+    
     FilePair revFilePair = filePairIt->first.getRevFilePair();
     double rmse1 = alignments_[filePairIt->first].getRmse();
     double rmse2 = alignments_[revFilePair].getRmse();
@@ -122,8 +124,24 @@ void AlignRetention::getAlignModels() {
   RTimePairs::iterator filePairIt;
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
     std::vector<double> medianRTimesRun1, medianRTimesRun2;
-        
+    
+    if (filePairIt->second.size() < 250) {
+      if (Globals::VERB > 2) {
+        std::cerr << "Skipping aligning runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
+            << ". Fewer than 250 retention time pairs: " << filePairIt->second.size() << std::endl;
+      }
+      continue;
+    }
+    
     getKnots(filePairIt->second, medianRTimesRun1, medianRTimesRun2);
+    
+    if (medianRTimesRun1.size() < 50) {
+      if (Globals::VERB > 2) {
+        std::cerr << "Skipping aligning runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
+            << ". Fewer than 50 retention time knots: " << medianRTimesRun1.size() <<  std::endl;
+      }
+      continue;
+    }
     
     alignments_[filePairIt->first].setData(medianRTimesRun1, medianRTimesRun2);
     alignments_[filePairIt->first].roughnessPenaltyIRLS();
@@ -166,15 +184,13 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   float binSize = static_cast<float>(rTimePairsSingleFilePair.size()) / numBins;
   for (int bin = 0; bin < numBins; ++bin) {
     size_t medianIdx = static_cast<int>(std::floor(binSize * (bin + 0.5f)));
-    RTimePair rtPair = rTimePairsSingleFilePair.at(medianIdx);
-    //std::cerr << "a " << rtPair.rTime1 << " " << rtPair.rTime2 << std::endl;
-    //medianRTimesRun1.push_back(rtPair.rTime1);
-    //medianRTimesRun2.push_back(rtPair.rTime2);
-    if (medianRTimesRun1.size() == 0 || ( medianRTimesRun1.back() != rTimesRun1.at(medianIdx) && medianRTimesRun2.back() != rTimesRun2.at(medianIdx) ) ) {
+    //RTimePair rtPair = rTimePairsSingleFilePair.at(medianIdx);
+    if (medianIdx < rTimesRun1.size() 
+        && (medianRTimesRun1.size() == 0  
+          || (medianRTimesRun1.back() != rTimesRun1.at(medianIdx) && medianRTimesRun2.back() != rTimesRun2.at(medianIdx) ) ) ) {
       medianRTimesRun1.push_back(rTimesRun1.at(medianIdx));
       medianRTimesRun2.push_back(rTimesRun2.at(medianIdx));
     }
-    //std::cerr << "b " << medianRTimesRun1.back() << " " << medianRTimesRun2.back() << std::endl;
   }
 }
 
