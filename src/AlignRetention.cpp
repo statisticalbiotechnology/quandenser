@@ -52,7 +52,7 @@ void AlignRetention::getAlignModelsTree() {
     
     float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
     
-    if (!isinf(rmseComb) && !isnan(rmseComb)) {
+    if (!isinf(rmseComb) && !isnan(rmseComb) && rmse1 > 0 && rmse2 > 0) {
       sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
     }
   }
@@ -160,7 +160,7 @@ void AlignRetention::getAlignModels() {
       float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
       std::cerr << "Aligned runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
           << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1 
-          << " rmse2 = " << rmse2 << std::endl;
+          << " rmse2 = " << rmse2 << " numPairs = " << filePairIt->second.size() << std::endl;
     }
   }
 }
