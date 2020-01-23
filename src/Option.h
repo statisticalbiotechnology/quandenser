@@ -30,19 +30,22 @@ typedef enum {
 } OptionOption;
 
 class Option {
-  public:
-    Option(std::string shrt, std::string lng, std::string dest, 
-           std::string hlp = "", std::string hlpType = "", 
-           OptionOption type = VALUE, std::string defau = "");
-    ~Option();
-    bool operator ==(const std::string& option);
-    OptionOption type;
-    std::string shortOpt;
-    std::string longOpt;
-    std::string help;
-    std::string name;
-    std::string helpType;
-    std::string deflt;
+ public:
+  Option(std::string shrt, std::string lng, std::string dest, 
+         std::string hlp = "", std::string hlpType = "", 
+         OptionOption type = VALUE, std::string defau = "");
+  ~Option();
+  bool operator ==(const std::string& option);
+  OptionOption type;
+  std::string shortOpt;
+  std::string longOpt;
+  std::string help;
+  std::string name;
+  std::string helpType;
+  std::string deflt;
+  
+  /* allow options without a short flag and for experimental features */
+  static const std::string NO_SHORT_OPT, EXPERIMENTAL_FEATURE; 
 };
 
 class CommandLineParser {

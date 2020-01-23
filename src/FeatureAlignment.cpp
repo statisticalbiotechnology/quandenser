@@ -21,8 +21,6 @@
 
 namespace quandenser {
 
-const float FeatureAlignment::kDecoyOffset = 5.0 * 1.000508;
-
 const std::vector<std::pair<std::string, double> > 
 FeatureAlignment::kLinkFeatureNames =
   boost::assign::list_of(make_pair("ppmDiff", -3.0))
@@ -172,7 +170,7 @@ void FeatureAlignment::matchFeatures(
     int label = 1;
     findMatches(label, rTimeTol, featuresTargetRun, queryFeature, topTargets);
     
-    queryFeature.precMz += kDecoyOffset;
+    queryFeature.precMz += decoyOffset_;
     label = -1;
     findMatches(label, rTimeTol, featuresTargetRun, queryFeature, topTargets);
     
@@ -344,7 +342,7 @@ void FeatureAlignment::mbrMatchFeatures(
                         queryIt->featureIdx << std::endl;
         
         targetFileStream << queryIt->precMz << "\t" << commonStream.str() << 
-            queryIt->precMz + kDecoyOffset << "\t" << commonStream.str();
+            queryIt->precMz + decoyOffset_ << "\t" << commonStream.str();
       }
     }
     targetFileStream.close();
@@ -440,7 +438,7 @@ void FeatureAlignment::processDinosaurTargets(
         if (targetFeature.intensity > 0.0)
           addLinkPsm(1, queryFeature, targetFeature, percolatorAdapter);
         
-        queryFeature.precMz += kDecoyOffset;
+        queryFeature.precMz += decoyOffset_;
         if (decoyFeature.intensity > 0.0)
           addLinkPsm(-1, queryFeature, decoyFeature, percolatorAdapter);
       }

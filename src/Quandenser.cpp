@@ -22,7 +22,8 @@ Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
     maxMissingValues_(-1), intensityScoreThreshold_(0.5),
     spectrumBatchFileFN_(""), outputFolder_("Quandenser_output"),
     outputSpectrumFile_(""), maraclusterPpmTol_(20.0f),
-    alignPpmTol_(20.0f), alignRTimeStdevTol_(10.0f),
+    alignPpmTol_(20.0f), alignRTimeStdevTol_(10.0f), 
+    decoyOffset_(5.0 * 1.000508),
     linkPEPThreshold_(0.25), linkPEPMbrSearchThreshold_(0.05),
     maxFeatureCandidates_(2) {}
 
@@ -152,6 +153,10 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "target-search-threshold",
       "Minimum posterior error probability for re-searching for a feature with a targeted search. Setting this to 1.0 will cause the targeted search to be skipped (lowest: 0.0, highest: 1.0, default: 0.05).",
       "double");
+  cmd.defineOption(Option::EXPERIMENTAL_FEATURE,
+      "decoy-offset",
+      "Decoy m/z offset (lowest: -1000.0, highest: 1000.0, default: 5.0 * 1.000508).",
+      "double");
   /*
     maxFeatureCandidates_(2)
     */
@@ -268,6 +273,11 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   if (cmd.optionSet("target-search-threshold")) {
     maxFeatureCandidates_ = cmd.getDouble("target-search-threshold", 0.0, 1.0);
   }
+  
+  if (cmd.optionSet("decoy-offset")) {
+    decoyOffset_ = cmd.getDouble("decoy-offset", -1000.0, 1000.0);
+  }
+  
   
   // if there are arguments left...
   if (cmd.arguments.size() > 0) {
@@ -432,7 +442,7 @@ int Quandenser::run() {
   
   FeatureAlignment featureAlignment(
       percolatorOutputFileBaseFN, percolatorArgs_, 
-      alignPpmTol_, alignRTimeStdevTol_, linkPEPThreshold_, 
+      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_, 
       linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
   featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures);
   

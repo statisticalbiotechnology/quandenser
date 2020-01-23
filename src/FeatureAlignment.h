@@ -60,12 +60,12 @@ class FeatureAlignment {
  public:
   FeatureAlignment(const std::string& percolatorOutputFileBaseFN, 
       std::vector<std::string>& percolatorArgs,
-      float ppmTol, float rTimeStdevTol,
+      float ppmTol, float rTimeStdevTol, float decoyOffset,
       float linkPEPThreshold, float linkPEPMbrSearchThreshold,
       int maxFeatureCandidates) : 
     percolatorOutputFileBaseFN_(percolatorOutputFileBaseFN), 
     percolatorArgs_(percolatorArgs), 
-    ppmTol_(ppmTol), rTimeStdevTol_(rTimeStdevTol),
+    ppmTol_(ppmTol), rTimeStdevTol_(rTimeStdevTol), decoyOffset_(decoyOffset),
     linkPEPThreshold_(linkPEPThreshold), 
     linkPEPMbrSearchThreshold_(linkPEPMbrSearchThreshold),
     maxFeatureCandidates_(maxFeatureCandidates) {}
@@ -85,13 +85,13 @@ class FeatureAlignment {
   std::vector<std::string>& percolatorArgs_;
   
   float ppmTol_, rTimeStdevTol_;
+  float decoyOffset_;
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
   
   std::map<FilePair, std::map<int, FeatureIdxMatch> > featureMatches_;
   
   static const std::vector<std::pair<std::string, double> > kLinkFeatureNames;
-  static const float kDecoyOffset;
   
   void getFeatureMap(FilePair& filePair, 
     const std::string& targetMzMLFile,

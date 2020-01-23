@@ -26,6 +26,9 @@
 
 namespace quandenser {
 
+const std::string Option::NO_SHORT_OPT = "NO_SHORT_OPT_CONSTANT";
+const std::string Option::EXPERIMENTAL_FEATURE = "EXPERIMENTAL_FEATURE_CONSTANT";
+
 template<class T>
 bool from_string(T& t, const std::string& s) {
   std::istringstream iss(s);
@@ -55,7 +58,10 @@ Option::~Option() {
 }
 
 bool Option::operator ==(const std::string& option) {
-  return (shortOpt == option || longOpt == option);
+  return ((shortOpt != Option::NO_SHORT_OPT && 
+           shortOpt != Option::EXPERIMENTAL_FEATURE && 
+           shortOpt == option) 
+          || longOpt == option);
 }
 
 CommandLineParser::CommandLineParser(std::string usage, std::string tail) {
@@ -100,13 +106,17 @@ void CommandLineParser::defineOption(std::string shortOpt, std::string longOpt,
   //NOTE brute force to check if the option is already defined
   for(std::vector<Option>::const_iterator it = opts.begin();
       it != opts.end(); it++) {
-	  if((*it).shortOpt == shortOpt || (*it).longOpt == longOpt) {
+	  if((shortOpt != Option::NO_SHORT_OPT && 
+	      shortOpt != Option::EXPERIMENTAL_FEATURE && 
+	      (*it).shortOpt == shortOpt) 
+	     || (*it).longOpt == longOpt) {
 	    std::ostringstream temp;
 	    temp << "ERROR : option " << shortOpt << "," << longOpt << " is already defined " << std::endl;
 	    throw MyException(temp.str());
 	  }
   }
-  opts.insert(opts.begin(), Option("-" + shortOpt,
+  
+  opts.insert(opts.begin(), Option((shortOpt == Option::NO_SHORT_OPT || shortOpt == Option::EXPERIMENTAL_FEATURE) ? shortOpt : "-" + shortOpt,
                                    "--" + longOpt,
                                    longOpt,
                                    help,
@@ -140,9 +150,13 @@ void CommandLineParser::help() {
   std::cerr << header << std::endl << "Options:" << std::endl;
   for (size_t i = opts.size(); i--;) {
     std::string::size_type j = 0;
-    std::cerr << " " << opts[i].shortOpt;
-    if (opts[i].helpType.length() > 0) {
-      std::cerr << " <" << opts[i].helpType << ">";
+    if (opts[i].shortOpt != Option::NO_SHORT_OPT && opts[i].shortOpt != Option::EXPERIMENTAL_FEATURE) {
+      std::cerr << " " << opts[i].shortOpt;
+      if (opts[i].helpType.length() > 0) {
+        std::cerr << " <" << opts[i].helpType << ">";
+      }
+    } else if (opts[i].shortOpt == Option::EXPERIMENTAL_FEATURE) {
+      std::cerr << "[EXPERIMENTAL FEATURE]";
     }
     std::cerr << std::endl;
     std::string desc = " " + opts[i].longOpt;
@@ -179,11 +193,17 @@ void CommandLineParser::htmlHelp() {
   std::cerr << htmlHeader << std::endl << "Options:" << std::endl;
   std::cerr << "<table border=0>" << std::endl;
   for (size_t i = opts.size(); i--;) {
-    std::cerr << "<tr><td><code>" << opts[i].shortOpt;
-    if (opts[i].helpType.length() > 0) {
-      std::cerr << " &lt;" << opts[i].helpType << "&gt;";
+    std::cerr << "<tr><td><code>";
+    if (opts[i].shortOpt != Option::NO_SHORT_OPT && opts[i].shortOpt != Option::EXPERIMENTAL_FEATURE) {
+      std::cerr << opts[i].shortOpt;
+      if (opts[i].helpType.length() > 0) {
+        std::cerr << " &lt;" << opts[i].helpType << "&gt;";
+      }
+      std::cerr << "</code>, ";
+    } else if (opts[i].shortOpt == Option::EXPERIMENTAL_FEATURE) {
+      std::cerr << "[EXPERIMENTAL FEATURE]";
     }
-    std::cerr << "</code>, <code>";
+    std::cerr << "<code>";
     std::cerr << " " + opts[i].longOpt;
     if (opts[i].helpType.length() > 0) {
       std::cerr << " &lt;" << opts[i].helpType << "&gt;";
