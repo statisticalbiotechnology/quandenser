@@ -456,6 +456,7 @@ int Quandenser::run() {
   std::vector<DinosaurFeatureList>::iterator ftListIt;
   for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
     ftListIt->sortByFeatureIdx();
+    ftListIt->clearFeatureToIdxMap();
   }
   
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);

@@ -79,6 +79,7 @@ class DinosaurFeatureList {
   inline bool isInitialized() const { return isInitialized_; }
   inline void setInitialized() { isInitialized_ = true; }
   
+  inline void clearFeatureToIdxMap() { featureToIdxMap_.clear(); }
   inline int getFeatureIdx(const DinosaurFeature& ft) const {
     if (featureToIdxMap_.find(ft) != featureToIdxMap_.end()) {
       return featureToIdxMap_.find(ft)->second;
