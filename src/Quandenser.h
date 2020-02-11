@@ -72,6 +72,7 @@ class Quandenser {
   float decoyOffset_;
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
+  bool useTempFiles_;
   
   void runMaRaCluster(const std::string& maRaClusterSubFolder, 
     const maracluster::SpectrumFileList& fileList, 

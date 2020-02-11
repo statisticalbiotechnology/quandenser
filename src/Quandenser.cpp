@@ -25,7 +25,7 @@ Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
     alignPpmTol_(20.0f), alignRTimeStdevTol_(10.0f), 
     decoyOffset_(5.0 * 1.000508),
     linkPEPThreshold_(0.25), linkPEPMbrSearchThreshold_(0.05),
-    maxFeatureCandidates_(2) {}
+    maxFeatureCandidates_(2), useTempFiles_(false) {}
 
 std::string Quandenser::greeter() {
   std::ostringstream oss;
@@ -157,6 +157,11 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "decoy-offset",
       "Decoy m/z offset (lowest: -1000.0, highest: 1000.0, default: 5.0 * 1.000508).",
       "double");
+  cmd.defineOption(Option::EXPERIMENTAL_FEATURE,
+      "use-tmp-files",
+      "Write temporary files to disk at several points in the process to reduce memory usage (default: false).",
+      "",
+      TRUE_IF_SET);
   /*
     maxFeatureCandidates_(2)
     */
@@ -278,6 +283,9 @@ bool Quandenser::parseOptions(int argc, char **argv) {
     decoyOffset_ = cmd.getDouble("decoy-offset", -1000.0, 1000.0);
   }
   
+  if (cmd.optionSet("use-tmp-files")) {
+    useTempFiles_ = true;
+  }
   
   // if there are arguments left...
   if (cmd.arguments.size() > 0) {
@@ -460,7 +468,19 @@ int Quandenser::run() {
   }
   
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);
-  featureGroups.singleLinkClustering(featureAlignmentQueue, featureAlignment.getFeatureMatches());
+  std::string tmpFilePrefix = "";
+  if (useTempFiles_) {
+    boost::filesystem::path tmpFileFolder(outputFolder_);
+    tmpFileFolder /= "tmp";
+    tmpFileFolder /= "featureToGroupMaps";
+    boost::filesystem::create_directories(tmpFileFolder, returnedError);
+    if (!boost::filesystem::exists(tmpFileFolder)) {
+      std::cerr << "Error: could not create output directory at " << tmpFileFolder << std::endl;
+      return EXIT_FAILURE;
+    }
+    tmpFilePrefix = tmpFileFolder.string();
+  }
+  featureGroups.singleLinkClustering(featureAlignmentQueue, featureAlignment.getFeatureMatches(), tmpFilePrefix);
   
   std::string maraclusterSubFolderConsensus = "consensus_spectra";
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
@@ -488,6 +508,7 @@ int Quandenser::run() {
       featureToSpectrumCluster); 
   */
   
+  // keep top 3 consensus spectra based on intensity score per feature group
   featureGroups.filterConsensusFeatures(allFeatures, featureToSpectrumCluster);
   
   boost::filesystem::path featureGroupsOutFile(outputFolder_);

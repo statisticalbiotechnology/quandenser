@@ -15,6 +15,7 @@
  ******************************************************************************/
 
 #include "FeatureGroups.h"
+#include "boost/lexical_cast.hpp"
 
 namespace quandenser {
 
@@ -29,8 +30,18 @@ bool operator<(const FeatureIdMatch& l, const FeatureIdMatch& r) {
 
 void FeatureGroups::singleLinkClustering(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
-    std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches) {
-  std::map<FeatureId, size_t> featureIdToGroupId;
+    std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches,
+    const std::string& tmpFilePrefix) {
+  size_t numFiles = featureMatches.size() / 2 + 1;
+  std::vector<FeatureToGroupMap> featureIdToGroupId(numFiles);
+  std::map<size_t, size_t> groupIdMap;
+  
+  if (!tmpFilePrefix.empty()) {
+    for (size_t i = 0; i < numFiles; ++i) {
+      std::string fileName = tmpFilePrefix + boost::lexical_cast<std::string>(i) + ".dat";
+      remove(fileName.c_str());
+    }
+  }
   
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   int filePairCnt = 0;
@@ -40,6 +51,15 @@ void FeatureGroups::singleLinkClustering(
     FilePair filePair = filePairIt->second;
     int fileIdx1 = filePair.fileIdx1;
     int fileIdx2 = filePair.fileIdx2;
+    
+    FeatureToGroupMap& queryFeatureIdToGroupId = featureIdToGroupId.at(fileIdx1);
+    FeatureToGroupMap& targetFeatureIdToGroupId = featureIdToGroupId.at(fileIdx2);
+    
+    if (!tmpFilePrefix.empty()) {
+      queryFeatureIdToGroupId.loadFromFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx1) + ".dat");
+      targetFeatureIdToGroupId.loadFromFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx2) + ".dat");
+    }
+    
     if (Globals::VERB > 2) {
       std::cerr << "Processing pair " << filePairCnt+1 << "/" 
           << featureAlignmentQueue.size() 
@@ -63,47 +83,70 @@ void FeatureGroups::singleLinkClustering(
       FeatureId targetFeatureId(fileIdx2, targetFeatureIdx);
       
       addToFeatureGroup(queryFeatureId, targetFeatureId, posteriorErrorProb,
-          featureIdToGroupId);
+          queryFeatureIdToGroupId, targetFeatureIdToGroupId, groupIdMap);
     }
+    
+    if (!tmpFilePrefix.empty()) {
+      bool append = false;
+      queryFeatureIdToGroupId.saveToFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx1) + ".dat", append);
+      targetFeatureIdToGroupId.saveToFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx2) + ".dat", append);
+      
+      queryFeatureIdToGroupId.clear();
+      targetFeatureIdToGroupId.clear();
+    }
+    
     featureMatches[filePair].clear();
+  }
+  
+  if (!tmpFilePrefix.empty()) {
+    for (size_t i = 0; i < numFiles; ++i) {
+      std::string fileName = tmpFilePrefix + boost::lexical_cast<std::string>(i) + ".dat";
+      remove(fileName.c_str());
+    }
   }
 }
 
 void FeatureGroups::addToFeatureGroup(const FeatureId& queryFeatureId,
     const FeatureId& targetFeatureId, float posteriorErrorProb,
-    std::map<FeatureId, size_t>& featureIdToGroupId) {
+    FeatureToGroupMap& queryFeatureIdToGroupId,
+    FeatureToGroupMap& targetFeatureIdToGroupId,
+    std::map<size_t, size_t>& groupIdMap) {
   size_t clusterIdx = 0u;
-  if (featureIdToGroupId.find(queryFeatureId) == featureIdToGroupId.end()
-       && featureIdToGroupId.find(targetFeatureId) == featureIdToGroupId.end()) {
+  int queryFeatureIdx = queryFeatureId.scannr;
+  int targetFeatureIdx = targetFeatureId.scannr;
+  
+  if (queryFeatureIdToGroupId.contains(queryFeatureIdx)
+       && targetFeatureIdToGroupId.contains(targetFeatureIdx)) {
+    clusterIdx = queryFeatureIdToGroupId.getGroupId(queryFeatureIdx, groupIdMap);
+    size_t mergeInClusterIdx = targetFeatureIdToGroupId.getGroupId(targetFeatureIdx, groupIdMap);
+    
+    if (mergeInClusterIdx != clusterIdx) {
+      groupIdMap[mergeInClusterIdx] = clusterIdx;
+      mergeFeatureGroups(clusterIdx, mergeInClusterIdx);
+    }
+  } else if (queryFeatureIdToGroupId.contains(queryFeatureIdx)) {
+    clusterIdx = queryFeatureIdToGroupId.getGroupId(queryFeatureIdx, groupIdMap);
+  } else if (targetFeatureIdToGroupId.contains(targetFeatureIdx)) {
+    clusterIdx = targetFeatureIdToGroupId.getGroupId(targetFeatureIdx, groupIdMap);
+  } else {
     clusterIdx = featureGroups_.size();
     featureGroups_.push_back(std::vector<FeatureIdMatch>());
-    featureIdToGroupId[queryFeatureId] = clusterIdx;
-    featureIdToGroupId[targetFeatureId] = clusterIdx;
-  } else if (featureIdToGroupId.find(queryFeatureId) == featureIdToGroupId.end()) {
-    clusterIdx = featureIdToGroupId[targetFeatureId];
-    featureIdToGroupId[queryFeatureId] = clusterIdx;
-  } else {
-    clusterIdx = featureIdToGroupId[queryFeatureId];
-    if (featureIdToGroupId.find(targetFeatureId) == featureIdToGroupId.end()) {
-      featureIdToGroupId[targetFeatureId] = clusterIdx;
-    } else if (featureIdToGroupId[targetFeatureId] != clusterIdx) {
-      size_t mergeInClusterIdx = featureIdToGroupId[targetFeatureId];
-      std::vector<FeatureIdMatch>::iterator matchIt;
-      for (matchIt = featureGroups_[mergeInClusterIdx].begin(); 
-           matchIt != featureGroups_[mergeInClusterIdx].end(); 
-           ++matchIt) {
-        featureIdToGroupId[matchIt->queryFeatureId] = clusterIdx;
-        featureIdToGroupId[matchIt->targetFeatureId] = clusterIdx;
-      }
-      featureGroups_[clusterIdx].insert(
-          featureGroups_[clusterIdx].end(), 
-          featureGroups_[mergeInClusterIdx].begin(), 
-          featureGroups_[mergeInClusterIdx].end() );
-      featureGroups_[mergeInClusterIdx].clear();
-    }
   }
+  
+  queryFeatureIdToGroupId[queryFeatureIdx] = clusterIdx;
+  targetFeatureIdToGroupId[targetFeatureIdx] = clusterIdx;
+  
   featureGroups_[clusterIdx].push_back(FeatureIdMatch(
       queryFeatureId, targetFeatureId, posteriorErrorProb));
+}
+
+void FeatureGroups::mergeFeatureGroups(const size_t clusterIdx, 
+    const size_t mergeInClusterIdx) {
+  featureGroups_[clusterIdx].insert(
+      featureGroups_[clusterIdx].end(), 
+      featureGroups_[mergeInClusterIdx].begin(), 
+      featureGroups_[mergeInClusterIdx].end() );
+  featureGroups_[mergeInClusterIdx].clear();
 }
 
 void FeatureGroups::filterConsensusFeatures(
