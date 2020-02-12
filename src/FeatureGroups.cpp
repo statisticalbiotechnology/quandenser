@@ -31,14 +31,15 @@ bool operator<(const FeatureIdMatch& l, const FeatureIdMatch& r) {
 void FeatureGroups::singleLinkClustering(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches,
-    const std::string& tmpFilePrefix) {
+    const std::string& tmpFilePrefixGroup,
+    const std::string& tmpFilePrefixAlign) {
   size_t numFiles = featureMatches.size() / 2 + 1;
   std::vector<FeatureToGroupMap> featureIdToGroupId(numFiles);
   std::map<size_t, size_t> groupIdMap;
   
-  if (!tmpFilePrefix.empty()) {
+  if (!tmpFilePrefixGroup.empty()) {
     for (size_t i = 0; i < numFiles; ++i) {
-      std::string fileName = tmpFilePrefix + boost::lexical_cast<std::string>(i) + ".dat";
+      std::string fileName = tmpFilePrefixGroup + boost::lexical_cast<std::string>(i) + ".dat";
       remove(fileName.c_str());
     }
   }
@@ -55,9 +56,16 @@ void FeatureGroups::singleLinkClustering(
     FeatureToGroupMap& queryFeatureIdToGroupId = featureIdToGroupId.at(fileIdx1);
     FeatureToGroupMap& targetFeatureIdToGroupId = featureIdToGroupId.at(fileIdx2);
     
-    if (!tmpFilePrefix.empty()) {
-      queryFeatureIdToGroupId.loadFromFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx1) + ".dat");
-      targetFeatureIdToGroupId.loadFromFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx2) + ".dat");
+    if (!tmpFilePrefixGroup.empty()) {
+      queryFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx1) + ".dat");
+      targetFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx2) + ".dat");
+    }
+    
+    if (!tmpFilePrefixAlign.empty()) {
+      std::string matchesFileName = tmpFilePrefixAlign + "/matches."  + 
+        boost::lexical_cast<std::string>(filePair.fileIdx1) + "." + 
+        boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+      FeatureAlignment::loadFromFile(matchesFileName, featureMatches[filePair]);
     }
     
     if (Globals::VERB > 2) {
@@ -86,10 +94,10 @@ void FeatureGroups::singleLinkClustering(
           queryFeatureIdToGroupId, targetFeatureIdToGroupId, groupIdMap);
     }
     
-    if (!tmpFilePrefix.empty()) {
+    if (!tmpFilePrefixGroup.empty()) {
       bool append = false;
-      queryFeatureIdToGroupId.saveToFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx1) + ".dat", append);
-      targetFeatureIdToGroupId.saveToFile(tmpFilePrefix + boost::lexical_cast<std::string>(fileIdx2) + ".dat", append);
+      queryFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx1) + ".dat", append);
+      targetFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx2) + ".dat", append);
       
       queryFeatureIdToGroupId.clear();
       targetFeatureIdToGroupId.clear();
@@ -98,9 +106,9 @@ void FeatureGroups::singleLinkClustering(
     featureMatches[filePair].clear();
   }
   
-  if (!tmpFilePrefix.empty()) {
+  if (!tmpFilePrefixGroup.empty()) {
     for (size_t i = 0; i < numFiles; ++i) {
-      std::string fileName = tmpFilePrefix + boost::lexical_cast<std::string>(i) + ".dat";
+      std::string fileName = tmpFilePrefixGroup + boost::lexical_cast<std::string>(i) + ".dat";
       remove(fileName.c_str());
     }
   }

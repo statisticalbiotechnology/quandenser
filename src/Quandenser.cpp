@@ -305,9 +305,10 @@ bool Quandenser::parseOptions(int argc, char **argv) {
 
 void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder, 
     const maracluster::SpectrumFileList& fileList, 
-    const std::vector<DinosaurFeatureList>& allFeatures,
+    std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
-    SpectrumToPrecursorMap& spectrumToPrecursorMap) {
+    SpectrumToPrecursorMap& spectrumToPrecursorMap,
+    const std::string& tmpFilePrefixAlign) {
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
   boost::filesystem::path maraclusterFolder(outputFolder_);
   maraclusterFolder /= maRaClusterSubFolder;
@@ -324,7 +325,16 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
   
   if (!boost::filesystem::exists(spectrumToPrecursorFile)) {
+    if (useTempFiles_) {
+      loadAllFeatures(tmpFilePrefixAlign, allFeatures);
+    }
+    
     maraclusterAdapter.run();
+    
+    if (useTempFiles_) {
+      unloadAllFeatures(allFeatures);
+    }
+    
     spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
     if (Globals::VERB > 1) {
       std::cerr << "Serialized spectrum to precursor map" << std::endl;
@@ -339,6 +349,20 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   clusterFilePath = maraclusterAdapter.getClusterFileName();
 }
 
+void Quandenser::loadAllFeatures(const std::string& tmpFilePrefixAlign,
+    std::vector<DinosaurFeatureList>& allFeatures) {
+  for (size_t i = 0; i < allFeatures.size(); ++i) {
+    std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
+    allFeatures.at(i).loadFromFile(fileName);
+  }
+}
+
+void Quandenser::unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures) {
+  for (size_t i = 0; i < allFeatures.size(); ++i) {
+    allFeatures.at(i).clear();
+  }
+}
+
 int Quandenser::run() {
   time_t startTime;
   clock_t startClock;
@@ -349,28 +373,40 @@ int Quandenser::run() {
     std::cerr << extendedGreeter(startTime);
   }
   
-  boost::filesystem::path rootPath(outputFolder_);
   boost::system::error_code returnedError;
-  boost::filesystem::create_directories(rootPath, returnedError);
   
+  boost::filesystem::path rootPath(outputFolder_);
+  boost::filesystem::create_directories(rootPath, returnedError);
   if (!boost::filesystem::exists(rootPath)) {
-    std::cerr << "Error: could not create output directory at " << outputFolder_ << std::endl;
+    std::cerr << "Error: could not create output directory at " 
+        << outputFolder_ << std::endl;
     return EXIT_FAILURE;
   }
+  
+  /*****************************************************************************  
+    Step 0: Read in the input text file with a list of mzML files
+   ****************************************************************************/
   
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
   
   if (fileList.size() < 2u) {
-    std::cerr << "Error: less than 2 spectrum files were specified, Quandenser needs at least two files to perform a meaningful alignment." << std::endl;
+    std::cerr << "Error: less than 2 spectrum files were specified, "
+        << "Quandenser needs at least two files to perform a "
+        << "meaningful alignment." << std::endl;
     return EXIT_FAILURE;
   }
+  
+  /*****************************************************************************  
+    Step 1: Detect MS1 features with Dinosaur
+   ****************************************************************************/
   
   boost::filesystem::path dinosaurFolder(rootPath);
   dinosaurFolder /= "dinosaur";
   boost::filesystem::create_directories(dinosaurFolder, returnedError);
   if (!boost::filesystem::exists(dinosaurFolder)) {
-    std::cerr << "Error: could not create output directory at " << dinosaurFolder.string() << std::endl;
+    std::cerr << "Error: could not create output directory at " 
+        << dinosaurFolder.string() << std::endl;
     return EXIT_FAILURE;
   }
   
@@ -417,85 +453,119 @@ int Quandenser::run() {
     }
   }  
   
+  std::string tmpFilePrefixAlign = "";
+  if (useTempFiles_) {
+    boost::filesystem::path tmpFileFolder(rootPath);
+    tmpFileFolder /= "tmp";
+    tmpFileFolder /= "matchFeatures";
+    boost::filesystem::create_directories(tmpFileFolder, returnedError);
+    if (!boost::filesystem::exists(tmpFileFolder)) {
+      std::cerr << "Error: could not create output directory at " << tmpFileFolder << std::endl;
+      return EXIT_FAILURE;
+    }
+    tmpFilePrefixAlign = tmpFileFolder.string();
+    
+    for (size_t i = 0; i < allFeatures.size(); ++i) {
+      std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
+      remove(fileName.c_str());
+      bool append = false;
+      allFeatures.at(i).saveToFile(fileName, append);
+      allFeatures.at(i).clear();
+    }
+  }
+  
+  /*****************************************************************************  
+    Step 2: Run MaRaCluster to form MS2 clusters
+   ****************************************************************************/
+   
   /* spectrumToPrecursorMap: 
        filled by runMaRaCluster(); 
        consumed by MaRaClusterIO::parseClustersForRTimePairs() */
   SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
   std::string maraclusterSubFolder = "maracluster";
   std::string clusterFilePath;
-  runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath, spectrumToPrecursorMap);
+  runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath, 
+      spectrumToPrecursorMap, tmpFilePrefixAlign);
   
+  /*****************************************************************************  
+    Step 3: Create minimum spanning tree of alignments
+   ****************************************************************************/
+   
   AlignRetention alignRetention;
   std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
-  MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
+  MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, 
+      spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
   
   alignRetention.getAlignModelsTree();
   
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
   alignRetention.createMinDepthTree(featureAlignmentQueue);
   
-  boost::filesystem::path percolatorFolder(outputFolder_);
+  /*****************************************************************************  
+    Step 4: Match features between runs
+   ****************************************************************************/
+   
+  boost::filesystem::path percolatorFolder(rootPath);
   percolatorFolder /= "percolator";
   boost::filesystem::create_directories(percolatorFolder, returnedError);
   if (!boost::filesystem::exists(percolatorFolder)) {
-    std::cerr << "Error: could not create output directory at " << percolatorFolder.string() << std::endl;
+    std::cerr << "Error: could not create output directory at " 
+              << percolatorFolder.string() << std::endl;
     return EXIT_FAILURE;
   }
   
-  std::string percolatorOutputFileBaseFN = percolatorFolder.string();
+  FeatureAlignment featureAlignment(percolatorFolder.string(), percolatorArgs_, 
+      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_, 
+      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
+  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, 
+      alignRetention, allFeatures, tmpFilePrefixAlign);
+  
+  std::vector<DinosaurFeatureList>::iterator ftListIt;
+  for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
+    ftListIt->clearFeatureToIdxMap();
+  }
+  
+  /*****************************************************************************  
+    Step 5: Apply single linkage clustering to form MS1 feature groups
+   ****************************************************************************/
   
   if (maxMissingValues_ < 0) {
     maxMissingValues_ = fileList.size() / 4;
   }
   
-  FeatureAlignment featureAlignment(
-      percolatorOutputFileBaseFN, percolatorArgs_, 
-      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_, 
-      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
-  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures);
-  
-  /* new maracluster run with newly added features */
-  std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
-  std::string clusterFilePathExtraFeatures;
-  SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
-  runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures, clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures);
-  
-  /* sort features by index before feature groups processing */
-  std::vector<DinosaurFeatureList>::iterator ftListIt;
-  for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
-    ftListIt->sortByFeatureIdx();
-    ftListIt->clearFeatureToIdxMap();
-  }
-  
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);
-  std::string tmpFilePrefix = "";
+  std::string tmpFilePrefixGroup = "";
   if (useTempFiles_) {
-    boost::filesystem::path tmpFileFolder(outputFolder_);
+    boost::filesystem::path tmpFileFolder(rootPath);
     tmpFileFolder /= "tmp";
     tmpFileFolder /= "featureToGroupMaps";
     boost::filesystem::create_directories(tmpFileFolder, returnedError);
     if (!boost::filesystem::exists(tmpFileFolder)) {
-      std::cerr << "Error: could not create output directory at " << tmpFileFolder << std::endl;
+      std::cerr << "Error: could not create output directory at " 
+                << tmpFileFolder << std::endl;
       return EXIT_FAILURE;
     }
-    tmpFilePrefix = tmpFileFolder.string();
+    tmpFilePrefixGroup = tmpFileFolder.string() + "/featureToGroupMap.";
   }
-  featureGroups.singleLinkClustering(featureAlignmentQueue, featureAlignment.getFeatureMatches(), tmpFilePrefix);
+  featureGroups.singleLinkClustering(featureAlignmentQueue, 
+      featureAlignment.getFeatureMatches(), tmpFilePrefixGroup, tmpFilePrefixAlign);
   
-  std::string maraclusterSubFolderConsensus = "consensus_spectra";
-  std::vector<std::string> maraclusterArgs = maraclusterArgs_;
-  boost::filesystem::path maraclusterFolder(outputFolder_);
-  maraclusterFolder /= maraclusterSubFolderConsensus;
-  maraclusterArgs[1] = "consensus";
-  maraclusterArgs.push_back("--output-folder");
-  maraclusterArgs.push_back(maraclusterFolder.string());
-  maraclusterArgs.push_back("--clusterFile");
-  maraclusterArgs.push_back(clusterFilePathExtraFeatures);
+  /*****************************************************************************  
+    Step 6: Run MaRaCluster again, now with newly discovered features from
+            targeted Dinosaur runs
+   ****************************************************************************/
   
-  std::vector<DinosaurFeatureList> noFeatures;
-  SpectrumToPrecursorMap noMap(fileList.size());
-  MaRaClusterAdapter maraclusterAdapter(noFeatures, noMap, outputSpectrumFile_);
-  maraclusterAdapter.parseOptions(maraclusterArgs);
+  std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
+  std::string clusterFilePathExtraFeatures;
+  SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
+  runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures, 
+      clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures, 
+      tmpFilePrefixAlign);  
+      
+  /*****************************************************************************  
+    Step 7: Keep top 3 consensus spectra per feature group based on 
+            intensity score 
+   ****************************************************************************/
   
   std::map<FeatureId, std::vector<int> > featureToSpectrumCluster; 
   std::ifstream fileStreamExtraFeatures(clusterFilePathExtraFeatures.c_str(), ios::in);
@@ -508,15 +578,50 @@ int Quandenser::run() {
       featureToSpectrumCluster); 
   */
   
-  // keep top 3 consensus spectra based on intensity score per feature group
+  if (useTempFiles_) {
+    loadAllFeatures(tmpFilePrefixAlign, allFeatures);
+  }
+  
+  for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
+    ftListIt->sortByFeatureIdx();
+  }
+  
   featureGroups.filterConsensusFeatures(allFeatures, featureToSpectrumCluster);
   
-  boost::filesystem::path featureGroupsOutFile(outputFolder_);
+  /*****************************************************************************  
+    Step 8: Write MS1 feature groups to output file
+   ****************************************************************************/
+  
+  std::vector<DinosaurFeatureList> noFeatures;
+  SpectrumToPrecursorMap noMap(fileList.size());
+  MaRaClusterAdapter maraclusterAdapter(noFeatures, noMap, outputSpectrumFile_);
+  
+  boost::filesystem::path featureGroupsOutFile(rootPath);
   featureGroupsOutFile /= fnPrefix_ + ".feature_groups.tsv";
   featureGroups.printFeatureGroups(featureGroupsOutFile.string(), 
       allFeatures, featureToSpectrumCluster, 
       maraclusterAdapter.getSpectrumClusterToConsensusFeatures());
+  featureGroups.clear(); // unload feature groups from memory
   
+  if (useTempFiles_) {
+    unloadAllFeatures(allFeatures);
+  }
+  
+  /*****************************************************************************  
+    Step 9: Create and write consensus spectra
+   ****************************************************************************/
+   
+  std::string maraclusterSubFolderConsensus = "consensus_spectra";
+  std::vector<std::string> maraclusterArgs = maraclusterArgs_;
+  boost::filesystem::path maraclusterFolder(rootPath);
+  maraclusterFolder /= maraclusterSubFolderConsensus;
+  maraclusterArgs[1] = "consensus";
+  maraclusterArgs.push_back("--output-folder");
+  maraclusterArgs.push_back(maraclusterFolder.string());
+  maraclusterArgs.push_back("--clusterFile");
+  maraclusterArgs.push_back(clusterFilePathExtraFeatures);
+  
+  maraclusterAdapter.parseOptions(maraclusterArgs);
   maraclusterAdapter.run();
   
   time_t endTime;

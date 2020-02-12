@@ -95,7 +95,8 @@ class FeatureGroups {
   void singleLinkClustering(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches,
-    const std::string& tmpFilePrefix);
+    const std::string& tmpFilePrefixGroup,
+    const std::string& tmpFilePrefixAlign);
   
   void filterConsensusFeatures(
     const std::vector<DinosaurFeatureList>& allFeatures,
@@ -106,7 +107,11 @@ class FeatureGroups {
     std::vector<DinosaurFeatureList>& allFeatures,
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures);
-    
+  
+  inline void clear() { 
+    std::vector<std::vector<FeatureIdMatch> >().swap(featureGroups_);
+  }
+  
  protected:  
   int maxMissingValues_;
   float intensityScoreThreshold_;

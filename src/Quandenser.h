@@ -76,9 +76,14 @@ class Quandenser {
   
   void runMaRaCluster(const std::string& maRaClusterSubFolder, 
     const maracluster::SpectrumFileList& fileList, 
-    const std::vector<DinosaurFeatureList>& allFeatures,
+    std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
-    SpectrumToPrecursorMap& spectrumToPrecursorMap);
+    SpectrumToPrecursorMap& spectrumToPrecursorMap,
+    const std::string& tmpFilePrefixAlign);
+  
+  void loadAllFeatures(const std::string& tmpFilePrefixAlign,
+    std::vector<DinosaurFeatureList>& allFeatures);
+  void unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures);
   
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;

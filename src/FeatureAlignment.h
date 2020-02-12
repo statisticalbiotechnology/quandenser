@@ -74,10 +74,26 @@ class FeatureAlignment {
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
-    std::vector<DinosaurFeatureList>& allFeatures);
+    std::vector<DinosaurFeatureList>& allFeatures,
+    const std::string& tmpFilePrefix);
   
   std::map<FilePair, std::map<int, FeatureIdxMatch> >& getFeatureMatches() {
     return featureMatches_;
+  }
+  
+  static size_t loadFromFile(const std::string& ftMatchFile, std::map<int, FeatureIdxMatch>& ftMatchMap) {
+    std::vector<std::pair<int, FeatureIdxMatch> > addedFtMatches;
+    maracluster::BinaryInterface::read(ftMatchFile, addedFtMatches);
+    for (std::pair<int, FeatureIdxMatch>& df : addedFtMatches) {
+      ftMatchMap[df.first] = df.second;
+    }
+    return ftMatchMap.size();
+  }
+  
+  static void saveToFile(const std::string& ftMatchFile, std::map<int, FeatureIdxMatch>& ftMatchMap, bool append) {
+    std::vector<std::pair<int, FeatureIdxMatch> > featureMatchPairs(
+        ftMatchMap.begin(), ftMatchMap.end());
+    maracluster::BinaryInterface::write(featureMatchPairs, ftMatchFile, append);
   }
   
  protected:
@@ -97,7 +113,8 @@ class FeatureAlignment {
     const std::string& targetMzMLFile,
     SplineRegression& alignment, 
     DinosaurFeatureList& featuresQueryRun, 
-    DinosaurFeatureList& featuresTargetRun);
+    DinosaurFeatureList& featuresTargetRun,
+    const std::string& tmpFilePrefix);
   
   void insertPlaceholderFeatures(
     const DinosaurFeatureList& featuresQueryRun, 
