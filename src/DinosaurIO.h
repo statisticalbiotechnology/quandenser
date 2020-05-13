@@ -50,7 +50,7 @@ class DinosaurIO {
   
  protected:
   static int runDinosaur(const std::string& dinosaurCmd);
-  static const std::string kAdvancedParamFile, kDinosaurJar;
+  static const std::string kAdvancedParamFile, kAdvancedParamFileTargeted, kDinosaurJar;
   
   static std::string javaMemory_;
   static int javaNumThreads_;

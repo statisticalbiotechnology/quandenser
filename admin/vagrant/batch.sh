@@ -7,7 +7,7 @@ release_dir=${HOME}/release
 
 platforms=()
 #platforms+=(osx)
-#platforms+=(win64)
+platforms+=(win64)
 #platforms+=(win32)
 #platforms+=(centos)
 #platforms+=(fedora)

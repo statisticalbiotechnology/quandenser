@@ -60,12 +60,12 @@ class FeatureAlignment {
  public:
   FeatureAlignment(const std::string& percolatorOutputFileBaseFN,
       std::vector<std::string>& percolatorArgs,
-      float ppmTol, float rTimeStdevTol,
+      float ppmTol, float rTimeStdevTol, float decoyOffset,
       float linkPEPThreshold, float linkPEPMbrSearchThreshold,
       int maxFeatureCandidates) :
     percolatorOutputFileBaseFN_(percolatorOutputFileBaseFN),
     percolatorArgs_(percolatorArgs),
-    ppmTol_(ppmTol), rTimeStdevTol_(rTimeStdevTol),
+    ppmTol_(ppmTol), rTimeStdevTol_(rTimeStdevTol), decoyOffset_(decoyOffset),
     linkPEPThreshold_(linkPEPThreshold),
     linkPEPMbrSearchThreshold_(linkPEPMbrSearchThreshold),
     maxFeatureCandidates_(maxFeatureCandidates) {}
@@ -75,10 +75,25 @@ class FeatureAlignment {
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
     std::vector<DinosaurFeatureList>& allFeatures,
-    const std::string& addedFeaturesFile);
+    const std::string& addedFeaturesFile, const std::string& tmpFilePrefix);
 
   std::map<FilePair, std::map<int, FeatureIdxMatch> >& getFeatureMatches() {
     return featureMatches_;
+  }
+
+  static size_t loadFromFile(const std::string& ftMatchFile, std::map<int, FeatureIdxMatch>& ftMatchMap) {
+    std::vector<std::pair<int, FeatureIdxMatch> > addedFtMatches;
+    maracluster::BinaryInterface::read(ftMatchFile, addedFtMatches);
+    for (std::pair<int, FeatureIdxMatch>& df : addedFtMatches) {
+      ftMatchMap[df.first] = df.second;
+    }
+    return ftMatchMap.size();
+  }
+
+  static void saveToFile(const std::string& ftMatchFile, std::map<int, FeatureIdxMatch>& ftMatchMap, bool append) {
+    std::vector<std::pair<int, FeatureIdxMatch> > featureMatchPairs(
+        ftMatchMap.begin(), ftMatchMap.end());
+    maracluster::BinaryInterface::write(featureMatchPairs, ftMatchFile, append);
   }
 
  protected:
@@ -86,20 +101,21 @@ class FeatureAlignment {
   std::vector<std::string>& percolatorArgs_;
 
   float ppmTol_, rTimeStdevTol_;
+  float decoyOffset_;
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
 
   std::map<FilePair, std::map<int, FeatureIdxMatch> > featureMatches_;
 
   static const std::vector<std::pair<std::string, double> > kLinkFeatureNames;
-  static const float kDecoyOffset;
 
   void getFeatureMap(FilePair& filePair,
     const std::string& targetMzMLFile,
     SplineRegression& alignment,
     DinosaurFeatureList& featuresQueryRun,
     DinosaurFeatureList& featuresTargetRun,
-    const std::string& addedFeaturesFile);
+		const std::string& addedFeaturesFile,
+    const std::string& tmpFilePrefix);
 
   void insertPlaceholderFeatures(
     const DinosaurFeatureList& featuresQueryRun,

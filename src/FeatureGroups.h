@@ -24,6 +24,7 @@
 
 #include "maracluster/src/SpectrumFileList.h"
 #include "maracluster/src/ScanId.h"
+#include "maracluster/src/BinaryInterface.h"
 
 #include "DinosaurFeatureList.h"
 #include "SimilarityMatrix.h"
@@ -46,6 +47,44 @@ struct FeatureIdMatch {
 
 bool operator<(const FeatureIdMatch& l, const FeatureIdMatch& r);
 
+class FeatureToGroupMap {
+ public:
+  FeatureToGroupMap() : featureIdToGroupId_() {};
+  ~FeatureToGroupMap(){};
+  
+  inline size_t& operator[](const size_t n) { return featureIdToGroupId_[n]; }
+  
+  inline bool contains(const size_t n) const { 
+    return featureIdToGroupId_.find(n) != featureIdToGroupId_.end();
+  }
+  inline void clear() { featureIdToGroupId_.clear(); }
+  
+  size_t getGroupId(const size_t n, const std::map<size_t, size_t>& groupIdMap) {
+    size_t clusterIdx = featureIdToGroupId_.at(n);
+    while (groupIdMap.find(clusterIdx) != groupIdMap.end()) {
+      clusterIdx = groupIdMap.at(clusterIdx);
+    }
+    return clusterIdx;
+  }
+  
+  size_t loadFromFile(const std::string& mapFile) {
+    std::vector<std::pair<int, size_t> > featureGroupPairs;
+    maracluster::BinaryInterface::read(mapFile, featureGroupPairs);
+    for (std::pair<int, size_t>& featureGroupPair : featureGroupPairs) {
+      featureIdToGroupId_[featureGroupPair.first] = featureGroupPair.second;
+    }
+    return featureIdToGroupId_.size();
+  }
+  
+  void saveToFile(const std::string& ftFile, bool append) {
+    std::vector<std::pair<int, size_t> > featureGroupPairs(featureIdToGroupId_.begin(), featureIdToGroupId_.end());
+    maracluster::BinaryInterface::write(featureGroupPairs, ftFile, append);
+  }
+ protected:
+  std::map<int, size_t> featureIdToGroupId_;
+  
+};
+
 class FeatureGroups {
  public:
   FeatureGroups(int maxMissingValues, float intensityScoreThreshold) : 
@@ -55,7 +94,9 @@ class FeatureGroups {
   
   void singleLinkClustering(
     const std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
-    std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches);
+    std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches,
+    const std::string& tmpFilePrefixGroup,
+    const std::string& tmpFilePrefixAlign);
   
   void filterConsensusFeatures(
     const std::vector<DinosaurFeatureList>& allFeatures,
@@ -66,7 +107,11 @@ class FeatureGroups {
     std::vector<DinosaurFeatureList>& allFeatures,
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures);
-    
+  
+  inline void clear() { 
+    std::vector<std::vector<FeatureIdMatch> >().swap(featureGroups_);
+  }
+  
  protected:  
   int maxMissingValues_;
   float intensityScoreThreshold_;
@@ -75,7 +120,12 @@ class FeatureGroups {
   
   void addToFeatureGroup(const FeatureId& queryFeatureId,
     const FeatureId& targetFeatureId, float posteriorErrorProb,
-    std::map<FeatureId, size_t>& featureIdToGroupId);
+    FeatureToGroupMap& queryFeatureIdToGroupId,
+    FeatureToGroupMap& targetFeatureIdToGroupId,
+    std::map<size_t, size_t>& groupIdMap);
+  
+  void mergeFeatureGroups(const size_t clusterIdx, 
+    const size_t mergeInClusterIdx);
   
   void addConsensusFeatureToSpectrumClusters(
     const DinosaurFeature& consensusFeature,

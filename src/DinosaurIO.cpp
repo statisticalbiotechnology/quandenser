@@ -19,7 +19,8 @@
 
 namespace quandenser {
 
-const std::string DinosaurIO::kAdvancedParamFile = "\"" + Globals::getJarPath() + std::string("advParams_dinosaur_targeted.txt") + "\"";
+const std::string DinosaurIO::kAdvancedParamFileTargeted = "\"" + Globals::getJarPath() + std::string("advParams_dinosaur_targeted.txt") + "\"";
+const std::string DinosaurIO::kAdvancedParamFile = "\"" + Globals::getJarPath() + std::string("advParams_dinosaur.txt") + "\"";
 const std::string DinosaurIO::kDinosaurJar = "\"" + Globals::getJarPath() + std::string("Dinosaur-1.1.3.free.jar") + "\"";
 
 std::string DinosaurIO::javaMemory_ = "24000M";
@@ -40,11 +41,11 @@ void DinosaurIO::setJavaMemory(std::string mem) {
 }
 
 int DinosaurIO::runDinosaurGlobal(const std::string& outputDir, const std::string& mzMLFile) {
-  return runDinosaur("--outDir=" + outputDir + " " + mzMLFile);
+  return runDinosaur("--outDir=" + outputDir + " --advParams=" + kAdvancedParamFile + " " + mzMLFile);
 }
 
 int DinosaurIO::runDinosaurTargeted(const std::string& outputDir, const std::string& mzMLFile, const std::string& targetFile) {
-  return runDinosaur("--outDir=" + outputDir + " --advParams=" + kAdvancedParamFile + " --mode=target --targets=" + targetFile + " " + mzMLFile);
+  return runDinosaur("--outDir=" + outputDir + " --advParams=" + kAdvancedParamFileTargeted + " --mode=target --targets=" + targetFile + " " + mzMLFile);
 }
 
 int DinosaurIO::runDinosaur(const std::string& dinosaurCmd) {

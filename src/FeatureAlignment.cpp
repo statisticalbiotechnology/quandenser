@@ -21,8 +21,6 @@
 
 namespace quandenser {
 
-const float FeatureAlignment::kDecoyOffset = 5.0 * 1.000508;
-
 const std::vector<std::pair<std::string, double> >
 FeatureAlignment::kLinkFeatureNames =
   boost::assign::list_of(make_pair("ppmDiff", -3.0))
@@ -46,17 +44,18 @@ void FeatureAlignment::matchFeatures(
     const maracluster::SpectrumFileList& fileList,
     AlignRetention& alignRetention,
     std::vector<DinosaurFeatureList>& allFeatures,
-    const std::string& addedFeaturesFile) {
+    const std::string& addedFeaturesFile,
+    const std::string& tmpFilePrefix) {
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   size_t alignmentCnt = 1u;
-  for (filePairIt = featureAlignmentQueue.begin(); 
+  for (filePairIt = featureAlignmentQueue.begin();
         filePairIt != featureAlignmentQueue.end(); ++filePairIt, ++alignmentCnt) {
     FilePair filePair = filePairIt->second;
 
     if (Globals::VERB > 1) {
-      std::cerr << "Matching features " << filePair.fileIdx1 
-                << "->" << filePair.fileIdx2 
-                << " (" << alignmentCnt << "/" 
+      std::cerr << "Matching features " << filePair.fileIdx1
+                << "->" << filePair.fileIdx2
+                << " (" << alignmentCnt << "/"
                 << featureAlignmentQueue.size() << ")" << std::endl;
     }
     std::string targetMzMLFile = fileList.getFilePath(filePair.fileIdx2);
@@ -64,7 +63,7 @@ void FeatureAlignment::matchFeatures(
         alignRetention.getAlignment(filePair),
         allFeatures.at(filePair.fileIdx1),
         allFeatures.at(filePair.fileIdx2),
-        addedFeaturesFile);
+        addedFeaturesFile, tmpFilePrefix);
   }
 }
 
@@ -73,7 +72,16 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     SplineRegression& alignment,
     DinosaurFeatureList& featuresQueryRun,
     DinosaurFeatureList& featuresTargetRun,
-    const std::string& addedFeaturesFile) {
+    const std::string& tmpFilePrefix) {
+  if (!tmpFilePrefix.empty()) {
+    std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx1) + ".dat";
+    featuresQueryRun.loadFromFile(fileName);
+
+    bool withIdxMap = true;
+    fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    featuresTargetRun.loadFromFile(fileName, withIdxMap);
+  }
+
   std::vector<double> rTimesQueryRun, predictedRTimesTargetRun;
   DinosaurFeatureList::const_iterator ftIt;
   for (ftIt = featuresQueryRun.begin(); ftIt != featuresQueryRun.end(); ++ftIt) {
@@ -86,13 +94,13 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
   std::string percolatorOutputFile = percolatorOutputFileBaseFN_ + "/link_" +
     boost::lexical_cast<std::string>(filePair.fileIdx1) + "_to_" +
     boost::lexical_cast<std::string>(filePair.fileIdx2) + ".psms";
-  if (!Globals::fileExists(percolatorOutputFile)) {
+  if (Globals::fileIsEmpty(percolatorOutputFile)) {
     matchFeatures(percolatorOutputFile, featuresQueryRun, featuresTargetRun,
                  predictedRTimesTargetRun, rTimeStdev);
   }
   addFeatureLinks(percolatorOutputFile, candidateFeaturesTargetRun,
                   featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
-  
+
   if (linkPEPMbrSearchThreshold_ < 1.0) {
     std::string percolatorMbrOutputFile = percolatorOutputFileBaseFN_ +
       "/search_and_link_" +
@@ -106,9 +114,26 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     addFeatureLinks(percolatorMbrOutputFile, candidateFeaturesTargetRun,
         featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
   }
-  
+
   insertPlaceholderFeatures(featuresQueryRun, predictedRTimesTargetRun,
       featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
+
+  featuresTargetRun.sortByPrecMz();
+
+  if (!tmpFilePrefix.empty()) {
+    std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    bool append = false;
+    featuresTargetRun.saveToFile(fileName, append);
+
+    featuresQueryRun.clear();
+    featuresTargetRun.clear();
+
+    std::string matchesFileName = tmpFilePrefix + "/matches."  +
+        boost::lexical_cast<std::string>(filePair.fileIdx1) + "." +
+        boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    saveToFile(matchesFileName, featureMatches_[filePair], append);
+    featureMatches_[filePair].clear();
+  }
 }
 
 void FeatureAlignment::insertPlaceholderFeatures(
@@ -142,14 +167,14 @@ void FeatureAlignment::insertPlaceholderFeatures(
       ++placeholdersAdded;
     }
   }
-  
+
   if (addedFeaturesFile.empty()) {
     featuresTargetRun.sortByPrecMz();
   } else {
     bool append = true;
     placeholderFeatures.saveToFile(addedFeaturesFile, append);
   }
-  
+
   if (Globals::VERB > 1) {
     std::cerr << "Added " << placeholdersAdded << " placeholders." << std::endl;
   }
@@ -173,7 +198,7 @@ void FeatureAlignment::matchFeatures(
   percolatorArgs.push_back("--tab-out");
   percolatorArgs.push_back(percolatorOutputFile + ".pin");
   */
-  
+
   PercolatorAdapter percolatorAdapter;
   percolatorAdapter.parseOptions(percolatorArgs);
   percolatorAdapter.init(kLinkFeatureNames);
@@ -189,7 +214,7 @@ void FeatureAlignment::matchFeatures(
     int label = 1;
     findMatches(label, rTimeTol, featuresTargetRun, queryFeature, topTargets);
 
-    queryFeature.precMz += kDecoyOffset;
+    queryFeature.precMz += decoyOffset_;
     label = -1;
     findMatches(label, rTimeTol, featuresTargetRun, queryFeature, topTargets);
 
@@ -198,8 +223,8 @@ void FeatureAlignment::matchFeatures(
 
     int numAdded = 0;
     std::vector<FeatureFeatureMatch>::const_iterator ffmIt;
-    for (ffmIt = topTargets.begin(); 
-          ffmIt != topTargets.end() && numAdded < maxFeatureCandidates_; 
+    for (ffmIt = topTargets.begin();
+          ffmIt != topTargets.end() && numAdded < maxFeatureCandidates_;
           ++ffmIt, ++numAdded) {
       addLinkPsm(ffmIt->label, ffmIt->queryFeature, ffmIt->targetFeature,
                  percolatorAdapter);
@@ -257,7 +282,7 @@ void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
           posteriorErrorProb, targetFt.intensity);
     }
   }
-  
+
   if (!addedFeaturesFile.empty()) {
     bool append = false;
     addedTargetFeatures.saveToFile(addedFeaturesFile, append);
@@ -351,7 +376,7 @@ void FeatureAlignment::mbrMatchFeatures(
 
   /* TODO: put these in a separate folder */
   std::string targetFile = percolatorOutputFile + ".dinosaur_targets.tsv";
-  if (!boost::filesystem::exists(targetFile)) {
+  if (Globals::fileIsEmpty(targetFile)) {
     std::ofstream targetFileStream(targetFile.c_str(), ios::out);
     targetFileStream << "mz\tcharge\tmzDiff\trtStart\trtEnd\tminApexInt\tid" << std::endl;
 
@@ -372,7 +397,7 @@ void FeatureAlignment::mbrMatchFeatures(
                         queryIt->featureIdx << std::endl;
 
         targetFileStream << queryIt->precMz << "\t" << commonStream.str() <<
-            queryIt->precMz + kDecoyOffset << "\t" << commonStream.str();
+            queryIt->precMz + decoyOffset_ << "\t" << commonStream.str();
       }
     }
     targetFileStream.close();
@@ -382,7 +407,7 @@ void FeatureAlignment::mbrMatchFeatures(
   std::string outputDir = percolatorOutputFile + "_dinosaur"; /* TODO: put these in a separate folder */
   std::string dinosaurOutputFile = outputDir + "/" +
       targetMzMLFilePath.stem().string() + ".targets.csv";
-  if (!boost::filesystem::exists(dinosaurOutputFile)) {
+  if (Globals::fileIsEmpty(dinosaurOutputFile)) {
     boost::filesystem::path dinosaurOutputDir(outputDir);
     boost::system::error_code returnedError;
     boost::filesystem::create_directories(dinosaurOutputDir, returnedError);
@@ -419,7 +444,7 @@ void FeatureAlignment::processDinosaurTargets(
 
   PercolatorAdapter percolatorAdapter;
   bool runPercolator = false;
-  if (!boost::filesystem::exists(percolatorOutputFile)) {
+  if (Globals::fileIsEmpty(percolatorOutputFile)) {
     runPercolator = true;
     percolatorArgs.push_back("--results-psms");
     percolatorArgs.push_back(percolatorOutputFile);
@@ -467,7 +492,7 @@ void FeatureAlignment::processDinosaurTargets(
         if (targetFeature.intensity > 0.0)
           addLinkPsm(1, queryFeature, targetFeature, percolatorAdapter);
 
-        queryFeature.precMz += kDecoyOffset;
+        queryFeature.precMz += decoyOffset_;
         if (decoyFeature.intensity > 0.0)
           addLinkPsm(-1, queryFeature, decoyFeature, percolatorAdapter);
       }

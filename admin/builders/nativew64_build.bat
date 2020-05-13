@@ -156,8 +156,8 @@ if not exist "%PWIZ_DIR%\lib" (
   for /r pwiz %%x in (*.hpp, *.h) do copy "%%x" include\ /Y > NUL
 )
 
-set MVN_BASE=apache-maven-3.6.1
-set MVN_URL=http://ftp.unicamp.br/pub/apache/maven/maven-3/3.6.1/binaries/%MVN_BASE%-bin.zip
+set MVN_BASE=apache-maven-3.6.3
+set MVN_URL=http://ftp.unicamp.br/pub/apache/maven/maven-3/3.6.3/binaries/%MVN_BASE%-bin.zip
 if not exist "%INSTALL_DIR%\%MVN_BASE%" (
   echo Downloading and installing Maven
   call :downloadfile %MVN_URL% %INSTALL_DIR%\mvn.zip

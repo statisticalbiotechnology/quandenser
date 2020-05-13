@@ -2,3 +2,4 @@ hillMaxMissing=1
 hillMinLength=3
 deisoCorr=0.0
 massCalcNBoots=10
+hillPeakFactorMinLength=300

@@ -69,6 +69,7 @@ class Quandenser {
   float intensityScoreThreshold_;
 
   float maraclusterPpmTol_, alignPpmTol_, alignRTimeStdevTol_;
+  float decoyOffset_;
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
 
@@ -76,18 +77,24 @@ class Quandenser {
   int parallel_2_;
   int parallel_3_;
   int parallel_4_;
+	bool useTempFiles_;
 
   void runMaRaCluster(const std::string& maRaClusterSubFolder,
     const maracluster::SpectrumFileList& fileList,
     const std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
-    SpectrumToPrecursorMap& spectrumToPrecursorMap);
-  
+    SpectrumToPrecursorMap& spectrumToPrecursorMap,
+    const std::string& tmpFilePrefixAlign);
+
+  void loadAllFeatures(const std::string& tmpFilePrefixAlign,
+    std::vector<DinosaurFeatureList>& allFeatures);
+  void unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures);
+
   std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
                            size_t fileIdx);
   std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
                            size_t fileIdx1, size_t fileIdx2);
-  
+
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;
 };

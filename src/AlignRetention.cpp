@@ -41,6 +41,8 @@ void AlignRetention::getAlignModelsTree() {
   RTimePairs::iterator filePairIt;
   std::vector<std::pair<float, FilePair> > sortedWeights;
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
+    if (alignments_.find(filePairIt->first) == alignments_.end()) continue;
+
     FilePair revFilePair = filePairIt->first.getRevFilePair();
     double rmse1 = alignments_[filePairIt->first].getRmse();
     double rmse2 = alignments_[revFilePair].getRmse();
@@ -49,11 +51,16 @@ void AlignRetention::getAlignModelsTree() {
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx2);
 
     float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
-    sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
+
+    if (!isinf(rmseComb) && !isnan(rmseComb) && rmse1 > 0 && rmse2 > 0) {
+      sortedWeights.push_back(std::make_pair(rmseComb, filePairIt->first));
+    }
   }
+  int numFiles = maxFileIdx + 1;
+
   std::sort(sortedWeights.begin(), sortedWeights.end());
 
-  for (int i = 0; i <= maxFileIdx; ++i) {
+  for (int i = 0; i < numFiles; ++i) {
     fileGraphNodes_.push_back(FileGraphNode(i));
   }
 
@@ -62,13 +69,15 @@ void AlignRetention::getAlignModelsTree() {
   if (sortedWeights.size() > 0) {
     addedNodes.insert(sortedWeights.front().second.fileIdx1);
   }
-  while (addedNodes.size() <= maxFileIdx) {
+  while (addedNodes.size() < numFiles && sortedWeights.size() > 0) {
+    bool inserted = false;
     for (std::vector<std::pair<float, FilePair> >::const_iterator it = sortedWeights.begin();
           it != sortedWeights.end(); ++it) {
       int fileIdx1 = it->second.fileIdx1;
       int fileIdx2 = it->second.fileIdx2;
       /* exactly 1 of the fileIdxs has to be in the addedNodes set */
       if ((addedNodes.find(fileIdx1) != addedNodes.end()) != (addedNodes.find(fileIdx2) != addedNodes.end())) {
+        inserted = true;
         addedNodes.insert(fileIdx1);
         addedNodes.insert(fileIdx2);
         fileGraphNodes_[fileIdx1].addNeighbor(fileIdx2);
@@ -78,12 +87,27 @@ void AlignRetention::getAlignModelsTree() {
         addedLinks.insert(it->second.getRevFilePair());
 
         if (Globals::VERB > 2) {
-          std::cerr << "Inserting link " << fileIdx1 << " to " << fileIdx2 << " with rmse " << it->first << std::endl;
+          std::cerr << "Inserting link " << fileIdx1 << " to "
+                    << fileIdx2 << " with rmse " << it->first << std::endl;
         }
 
         break;
       }
     }
+    if (!inserted) break;
+  }
+
+  if (addedNodes.size() != numFiles) {
+    std::ostringstream oss;
+    oss << "ERROR: Could not create minimum spanning tree for alignments." << std::endl
+        << "  Not enough overlap of MS2 clusters for the following runs:";
+    for (int i = 0; i < numFiles; ++i) {
+      if (addedNodes.find(i) == addedNodes.end()) {
+        oss << " " << i;
+      }
+    }
+    oss << std::endl << "  Terminating.." << std::endl;
+    throw MyException(oss.str());
   }
 
   std::map<FilePair, SplineRegression>::iterator alignmentIt;
@@ -101,7 +125,23 @@ void AlignRetention::getAlignModels() {
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
     std::vector<double> medianRTimesRun1, medianRTimesRun2;
 
+    if (filePairIt->second.size() < 250) {
+      if (Globals::VERB > 2) {
+        std::cerr << "Skipping aligning runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
+            << ". Fewer than 250 retention time pairs: " << filePairIt->second.size() << std::endl;
+      }
+      continue;
+    }
+
     getKnots(filePairIt->second, medianRTimesRun1, medianRTimesRun2);
+
+    if (medianRTimesRun1.size() < 50) {
+      if (Globals::VERB > 2) {
+        std::cerr << "Skipping aligning runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
+            << ". Fewer than 50 retention time knots: " << medianRTimesRun1.size() <<  std::endl;
+      }
+      continue;
+    }
 
     alignments_[filePairIt->first].setData(medianRTimesRun1, medianRTimesRun2);
     alignments_[filePairIt->first].roughnessPenaltyIRLS();
@@ -120,7 +160,7 @@ void AlignRetention::getAlignModels() {
       float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
       std::cerr << "Aligned runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
           << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1
-          << " rmse2 = " << rmse2 << std::endl;
+          << " rmse2 = " << rmse2 << " numPairs = " << filePairIt->second.size() << std::endl;
     }
   }
 }
@@ -144,13 +184,13 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   float binSize = static_cast<float>(rTimePairsSingleFilePair.size()) / numBins;
   for (int bin = 0; bin < numBins; ++bin) {
     size_t medianIdx = static_cast<int>(std::floor(binSize * (bin + 0.5f)));
-    RTimePair rtPair = rTimePairsSingleFilePair.at(medianIdx);
-    //std::cerr << "a " << rtPair.rTime1 << " " << rtPair.rTime2 << std::endl;
-    //medianRTimesRun1.push_back(rtPair.rTime1);
-    //medianRTimesRun2.push_back(rtPair.rTime2);
-    medianRTimesRun1.push_back(rTimesRun1.at(medianIdx));
-    medianRTimesRun2.push_back(rTimesRun2.at(medianIdx));
-    //std::cerr << "b " << medianRTimesRun1.back() << " " << medianRTimesRun2.back() << std::endl;
+    //RTimePair rtPair = rTimePairsSingleFilePair.at(medianIdx);
+    if (medianIdx < rTimesRun1.size()
+        && (medianRTimesRun1.size() == 0
+          || (medianRTimesRun1.back() != rTimesRun1.at(medianIdx) && medianRTimesRun2.back() != rTimesRun2.at(medianIdx) ) ) ) {
+      medianRTimesRun1.push_back(rTimesRun1.at(medianIdx));
+      medianRTimesRun2.push_back(rTimesRun2.at(medianIdx));
+    }
   }
 }
 
