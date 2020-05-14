@@ -690,17 +690,6 @@ int Quandenser::run() {
     std::cout << "Parallel stop 3 reached" << std::endl;
     return EXIT_SUCCESS;
   }
-
-  /* new maracluster run with newly added features */
-  std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
-  std::string clusterFilePathExtraFeatures;
-  SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
-  runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures, clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures);
-  if (parallel_4_) {
-    //std::cout << "Parallel stop 4 reached" << std::endl;
-    //return EXIT_SUCCESS;
-  }
-
   /* sort features by index before feature groups processing */
   std::vector<DinosaurFeatureList>::iterator ftListIt;
   for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {

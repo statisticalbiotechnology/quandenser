@@ -72,6 +72,7 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     SplineRegression& alignment,
     DinosaurFeatureList& featuresQueryRun,
     DinosaurFeatureList& featuresTargetRun,
+    const std::string& addedFeaturesFile,
     const std::string& tmpFilePrefix) {
   if (!tmpFilePrefix.empty()) {
     std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx1) + ".dat";
