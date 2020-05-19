@@ -2,6 +2,13 @@
 # NAME AND VERSION
 ###############################################################################
 cmake_minimum_required(VERSION 2.6)
+
+if(APPLE AND ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION} VERSION_GREATER 3.0)
+  # Identify AppleClang's COMPILER_ID as AppleClang instead of just Clang 
+  # (https://gitlab.kitware.com/cmake/cmake/issues/19067)
+  cmake_policy(SET CMP0025 NEW)
+endif()
+
 project(QUANDENSER)
 set(QUANDENSER_SOURCE_DIR ${CMAKE_SOURCE_DIR})
 include("CommonCMake.txt")
@@ -73,7 +80,7 @@ load_config_files_with_output_dir("${PERCOLATOR_SOURCE_DIR}" "${CMAKE_CURRENT_BI
 
 add_subdirectory(ext/percolator/src ./percolator EXCLUDE_FROM_ALL)
 
-foreach (TARGET perclibrary fido picked_protein percolator qvality)
+foreach (TARGET perclibrary blas fido picked_protein percolator qvality)
   target_include_directories(${TARGET} PRIVATE ${PERCOLATOR_SOURCE_DIR})
   target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/ext/percolator/src) # needed for CMake generated files
 endforeach()
@@ -90,14 +97,20 @@ endif (MSVC)
 
 MESSAGE( STATUS "Building Dinosaur with Maven" )
 
+# There is currently a bug in the MzML reader. Until the pull request (https://github.com/fickludd/proteomicore/pull/1) is merged, we build it ourselves with the fix included
+execute_process(COMMAND ${MVN_CMD} install -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/proteomicore/io/MzML WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/proteomicore/io/MzML OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/proteomicore_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/proteomicore_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
+
+if(NOT "${MVN_RESULT}" STREQUAL "0")
+  message(FATAL_ERROR "Cannot create module Proteomicore, mvn execution failed: ${MVN_RESULT}")
+endif()
+
 execute_process(COMMAND ${MVN_CMD} package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
 
 if(NOT "${MVN_RESULT}" STREQUAL "0")
   message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed: ${MVN_RESULT}")
 endif()
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.3.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.3.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt DESTINATION ${JAR_PATH})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.4.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
 
 ###############################################################################
 # COMPILING QUANDENSER

@@ -36,13 +36,13 @@ void PercolatorAdapter::process() {
   
   // Copy feature data pointers to Scores object
   Scores allScores(useMixMax_);
-  allScores.fillFeatures(setHandler_);
-  
+  allScores.populateWithPSMs(setHandler_);
   
   CrossValidation crossValidation(quickValidation_, reportEachIteration_, 
                                   testFdr_, selectionFdr_, initialSelectionFdr_, selectedCpos_, 
                                   selectedCneg_, numIterations_, useMixMax_,
-                                  nestedXvalBins_, trainBestPositive_);
+                                  nestedXvalBins_, trainBestPositive_,
+                                  numThreads_, skipNormalizeScores_);
   int firstNumberOfPositives = crossValidation.preIterationSetup(allScores, pCheck_, pNorm_, setHandler_.getFeaturePool());
   if (Globals::VERB > 0) {
     cerr << "Found " << firstNumberOfPositives << " test set positives with q<"

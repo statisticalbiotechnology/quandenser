@@ -19,7 +19,7 @@
 namespace quandenser {
 
 Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
-    maxMissingValues_(-1), intensityScoreThreshold_(0.5),
+    numThreads_(4u), maxMissingValues_(-1), intensityScoreThreshold_(0.5),
     spectrumBatchFileFN_(""), outputFolder_("Quandenser_output"),
     outputSpectrumFile_(""), maraclusterPpmTol_(20.0f),
     alignPpmTol_(20.0f), alignRTimeStdevTol_(10.0f), 
@@ -101,6 +101,10 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "verbatim",
       "Set the verbatim level (lowest: 0, highest: 5, default: 3).",
       "int");
+  cmd.defineOption("N",
+      "num-threads",
+      "Number of threads used for Quandenser, this includes the number of threads for MaRaCluster, Percolator and Dinosaur (the latter can be overriden by --dinosaur-threads) (default: 4).",
+      "int");
   cmd.defineOption("o",
       "spec-out",
       "Path to output file for the consensus spectra, the infix \".part<x>\" will be added before the extension. All output file formats supported by ProteoWizard are valid (default: <output-folder>/consensus_spectra/<prefix>.consensus.ms2)",
@@ -119,7 +123,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "value");
   cmd.defineOption("n",
       "dinosaur-threads",
-      "Maximum number of threads available for Dinosaur (default: 4).",
+      "Maximum number of threads available for Dinosaur, will override --num-threads if specified (default: 4).",
       "int");
   cmd.defineOption("p",
       "maracluster-pval-threshold",
@@ -212,12 +216,19 @@ bool Quandenser::parseOptions(int argc, char **argv) {
     percolatorArgs_.push_back(cmd.options["verbatim"]);
   }
   
+  if (cmd.optionSet("num-threads")) {
+    numThreads_ = cmd.getInt("num-threads", 1, 1000);
+    percolatorArgs_.push_back("--num-threads");
+    percolatorArgs_.push_back(cmd.options["num-threads"]);
+    DinosaurIO::setJavaNumThreads(cmd.getInt("num-threads", 1, 1000));
+  }
+  
   if (cmd.optionSet("dinosaur-memory")) {
     DinosaurIO::setJavaMemory(cmd.options["dinosaur-memory"]);
   }
   
   if (cmd.optionSet("dinosaur-threads")) {
-    DinosaurIO::setJavaNumThreads(cmd.getInt("dinosaur-threads", 1, 100));
+    DinosaurIO::setJavaNumThreads(cmd.getInt("dinosaur-threads", 1, 1000));
   }
   
   if (cmd.optionSet("maracluster-pval-threshold")) {
@@ -331,13 +342,13 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
     
     maraclusterAdapter.run();
     
-    if (useTempFiles_) {
-      unloadAllFeatures(allFeatures);
-    }
-    
     spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
     if (Globals::VERB > 1) {
       std::cerr << "Serialized spectrum to precursor map" << std::endl;
+    }
+    
+    if (useTempFiles_) {
+      unloadAllFeatures(allFeatures);
     }
   } else {
     spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
@@ -354,12 +365,121 @@ void Quandenser::loadAllFeatures(const std::string& tmpFilePrefixAlign,
   for (size_t i = 0; i < allFeatures.size(); ++i) {
     std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
     allFeatures.at(i).loadFromFile(fileName);
+    if (Globals::VERB > 2) {
+      std::cerr << "Read in " << allFeatures.at(i).size() << " features from " << fileName << std::endl;
+    }
   }
 }
 
 void Quandenser::unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures) {
   for (size_t i = 0; i < allFeatures.size(); ++i) {
     allFeatures.at(i).clear();
+  }
+}
+
+// adapted from https://github.com/crux-toolkit/crux-toolkit/blob/master/src/util/crux-utils.cpp
+bool Quandenser::parseUrl(std::string url, std::string* host, std::string* path) {
+  if (!host || !path) {
+    return false;
+  }
+  // find protocol
+  size_t protocolSuffix = url.find("://");
+  if (protocolSuffix != std::string::npos) {
+    url = url.substr(protocolSuffix + 3);
+  }
+  size_t pathBegin = url.find('/');
+  if (pathBegin == std::string::npos) {
+    *host = url;
+    *path = "/";
+  } else {
+    *host = url.substr(0, pathBegin);
+    *path = url.substr(pathBegin);
+  }
+  if (host->empty()) {
+    *host = *path = "";
+    return false;
+  }
+  return true;
+}
+
+void Quandenser::httpRequest(const std::string& url, const std::string& data) {
+  // Parse URL into host and path components
+  std::string host, path;
+  if (!parseUrl(url, &host, &path)) {
+    if (Globals::VERB > 2) {
+      std::cerr << "Warning: Failed parsing URL " << url << std::endl;
+    }
+    return;
+  }
+
+  using namespace boost::asio;
+
+  // Establish TCP connection to host on port 80
+  io_service service;
+  ip::tcp::resolver resolver(service);
+  ip::tcp::resolver::iterator endpoint = resolver.resolve(ip::tcp::resolver::query(host, "80"));
+  ip::tcp::socket sock(service);
+  connect(sock, endpoint);
+  
+  std::size_t seed = 0;
+  boost::hash_combine(seed, ip::host_name());
+  boost::hash_combine(seed, sock.local_endpoint().address().to_string());
+  std::stringstream stream;
+  stream << std::hex << seed;
+  
+  std::string placeholder = "CID_PLACEHOLDER";
+  std::string cid = stream.str();
+  
+  std::string newData(data);
+  
+  if (Globals::VERB > 3) {
+    std::cerr << "Analytics data string: " << newData << std::endl;
+  }
+  
+  newData.replace(newData.find(placeholder), placeholder.length(), cid);
+  
+  // Determine method (GET if no data; otherwise POST)
+  std::string method = newData.empty() ? "GET" : "POST";
+  std::ostringstream lengthString;
+  lengthString << newData.length();
+  
+  std::string contentLengthHeader = newData.empty()
+    ? ""
+    : "Content-Length: " + lengthString.str() + "\r\n";
+  // Send the HTTP request
+  std::string request =
+    method + " " + path + " HTTP/1.1\r\n"
+    "Host: " + host + "\r\n" +
+    contentLengthHeader +
+    "Connection: close\r\n"
+    "\r\n" + newData;
+  sock.send(buffer(request));
+}
+
+void Quandenser::postToAnalytics(const std::string& appName) {
+  // Post data to Google Analytics
+  // For more information, see: https://developers.google.com/analytics/devguides/collection/protocol/v1/devguide
+  try {
+    std::stringstream paramBuilder;
+    paramBuilder << "v=1"                // Protocol verison
+                 << "&tid=UA-165948942-2" // Tracking ID
+                 << "&cid=CID_PLACEHOLDER" // Unique device ID
+                 << "&t=event"           // Hit type
+                 << "&ec=quandenser"     // Event category
+                 << "&ea=" << appName    // Event action
+                 << "&el="               // Event label
+#ifdef _MSC_VER
+                      "win"
+#elif __APPLE__
+                      "mac"
+#else
+                      "linux"
+#endif
+                   << '-' << VERSION;
+    httpRequest(
+      "http://www.google-analytics.com/collect",
+      paramBuilder.str());
+  } catch (...) {
   }
 }
 
@@ -373,6 +493,13 @@ int Quandenser::run() {
     std::cerr << extendedGreeter(startTime);
   }
   
+  std::string appName = "quandenser";
+  postToAnalytics(appName);
+  
+#ifdef _OPENMP
+  omp_set_num_threads(std::min((unsigned int)omp_get_max_threads(), numThreads_));
+#endif
+
   boost::system::error_code returnedError;
   
   boost::filesystem::path rootPath(outputFolder_);

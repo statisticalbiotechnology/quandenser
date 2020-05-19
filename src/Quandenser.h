@@ -24,6 +24,8 @@
 #include <vector>
 
 #include <boost/filesystem.hpp>
+#include <boost/asio.hpp>
+#include <boost/functional/hash_fwd.hpp>
 
 #include "maracluster/src/Globals.h"
 #include "maracluster/src/SpectrumFileList.h"
@@ -65,6 +67,7 @@ class Quandenser {
   std::string fnPrefix_;
   
   int seed_;
+  unsigned int numThreads_;
   int maxMissingValues_;
   float intensityScoreThreshold_;
   
@@ -84,6 +87,11 @@ class Quandenser {
   void loadAllFeatures(const std::string& tmpFilePrefixAlign,
     std::vector<DinosaurFeatureList>& allFeatures);
   void unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures);
+  
+  // google analytics
+  static bool parseUrl(std::string url, std::string* host, std::string* path);
+  static void httpRequest(const std::string& url, const std::string& data);
+  static void postToAnalytics(const std::string& appName);
   
   std::vector<std::string> maraclusterArgs_;
   std::vector<std::string> percolatorArgs_;

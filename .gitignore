@@ -33,3 +33,4 @@
 
 *.pyc
 admin/vagrant/*_output.txt
+bin/*
