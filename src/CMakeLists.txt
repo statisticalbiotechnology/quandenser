@@ -11,6 +11,7 @@ include_directories(../ext)
 # the percolator header files point across subdirectories...
 include_directories(../ext/percolator/src)
 include_directories(../ext/percolator/src/fido)
+include_directories(../ext/percolator/src/blas)
 include_directories(../ext/percolator/src/picked_protein)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/../ext)
 
@@ -61,6 +62,10 @@ if(MSVC)
   set(CMAKE_THREAD_LIBS_INIT ${CMAKE_THREAD_LIBS_INIT} ${THREADS_LIBRARY})
 endif()
 
+if(APPLE AND OPENMP_FOUND)
+  include_directories(${OpenMP_CXX_INCLUDE_DIRS})
+endif(APPLE AND OPENMP_FOUND)
+
 #############################################################################
 # COMPILE QUANDENSER
 #############################################################################
@@ -88,11 +93,18 @@ if(PROFILING AND UNIX)
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g -DNDEBUG -Wno-unused-result -Wno-overflow -Wall -g -pg -fprofile-arcs -ftest-coverage")
 endif() 
 
-set(COMMON_LIBRARIES ${PWIZ_LIBRARIES} ${Boost_LIBRARIES} ${ZLIB_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
+set(COMMON_LIBRARIES quandenserlibrary batchlibrary maraclusterlibrary perclibrary blas fido picked_protein ${PWIZ_LIBRARIES} ${Boost_LIBRARIES} ${ZLIB_LIBRARY} ${CMAKE_THREAD_LIBS_INIT})
 
-# SET LIBRARIES FOR QUANDENSER
+if(MSVC)
+  target_link_libraries(quandenser ${COMMON_LIBRARIES})
+else(MSVC)
+  if (APPLE)
+    target_link_libraries(quandenser ${COMMON_LIBRARIES} ${OpenMP_CXX_LIBRARIES})
+  else(APPLE)
+    target_link_libraries(quandenser ${COMMON_LIBRARIES} stdc++)
+  endif (APPLE)
+endif()
 
-target_link_libraries(quandenser quandenserlibrary batchlibrary maraclusterlibrary perclibrary fido picked_protein ${COMMON_LIBRARIES})
 #if(MSVC)
 #  target_link_libraries(extractraw batchlibrary quandenserlibrary ${COMMON_LIBRARIES})
 #endif(MSVC)
