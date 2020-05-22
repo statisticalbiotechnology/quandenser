@@ -19,12 +19,14 @@ set SRC_DIR=%~dp0..\..\..\
 set BUILD_DIR=%SRC_DIR%\build\win64
 set RELEASE_DIR=%SRC_DIR%\release\win64
 set BUILD_TYPE=Release
+set VENDOR=false
 
 :parse
 IF "%~1"=="" GOTO endparse
 IF "%~1"=="-s" (set SRC_DIR=%~2)
 IF "%~1"=="-b" (set BUILD_DIR=%~2)
 IF "%~1"=="-r" (set RELEASE_DIR=%~2)
+IF "%~1"=="-e" (set VENDOR=true)
 SHIFT
 GOTO parse
 :endparse
@@ -65,6 +67,9 @@ set /p PWIZ_VERSION_STRING=<%INSTALL_DIR%\VERSION
 set PWIZ_BASE=pwiz-src-without-t-%PWIZ_VERSION_STRING: =_%
 set PWIZ_URL=https://teamcity.labkey.org/guestAuth/repository/download/bt81/.lastSuccessful/%PWIZ_BASE%.tar.bz2
 set PWIZ_DIR=%INSTALL_DIR%\proteowizard
+::: Boost asio library
+set BOOST_ASIO_BASE=boost_asio_1_10_4
+set BOOST_ASIO_URL=https://sourceforge.net/projects/asio/files/asio/1.10.4 (Stable)/%BOOST_ASIO_BASE%.zip/download
 if not exist "%PWIZ_DIR%\lib" (
   echo Downloading and installing ProteoWizard
   if not exist "%PWIZ_DIR%" (
@@ -152,6 +157,11 @@ if not exist "%PWIZ_DIR%\lib" (
 
   mkdir include
   for /r pwiz %%x in (*.hpp, *.h) do copy "%%x" include\ /Y > NUL
+  
+  ::: copy the boost::asio library, which is not included by the ProteoWizard boost tar but is needed for maracluster
+  call :downloadfile "%BOOST_ASIO_URL%" %INSTALL_DIR%\boost_asio.zip
+  %ZIP_EXE% x "%INSTALL_DIR%\boost_asio.zip" -o"%INSTALL_DIR%" -aoa > NUL
+  PowerShell "Copy-Item -Path '%INSTALL_DIR%\%BOOST_ASIO_BASE%\boost' -Destination '%PWIZ_DIR%\libraries\boost_1_67_0' -Recurse"
 )
 
 set MVN_BASE=apache-maven-3.6.3
@@ -207,32 +217,45 @@ msbuild PACKAGE.vcxproj /p:Configuration=%BUILD_TYPE% /m
 ::msbuild INSTALL.vcxproj /p:Configuration=%BUILD_TYPE% /m
 ::msbuild RUN_TESTS.vcxproj /p:Configuration=%BUILD_TYPE% /m
 
-::::::: Building quandenser with vendor support :::::::
-if not exist "%BUILD_DIR%\quandenser-vendor-support" (md "%BUILD_DIR%\quandenser-vendor-support")
-cd /D "%BUILD_DIR%\quandenser-vendor-support"
-echo cmake quandenser with vendor support.....
-%CMAKE_EXE% -G "Visual Studio %MSVC_VER%" -A x64 -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_67_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" -DVENDOR_SUPPORT=ON "%SRC_DIR%\quandenser"
+if not "%NO_GUI%" == "true" (
+  ::::::: Building quandenser with vendor support :::::::
+  if not exist "%BUILD_DIR%\quandenser-vendor-support" (md "%BUILD_DIR%\quandenser-vendor-support")
+  cd /D "%BUILD_DIR%\quandenser-vendor-support"
+  echo cmake quandenser with vendor support.....
+  %CMAKE_EXE% -G "Visual Studio %MSVC_VER%" -A x64 -DBOOST_ROOT="%PWIZ_DIR%\libraries\boost_1_67_0" -DZLIB_INCLUDE_DIR="%PWIZ_DIR%\libraries\zlib-1.2.3" -DCMAKE_PREFIX_PATH="%PWIZ_DIR%" -DVENDOR_SUPPORT=ON "%SRC_DIR%\quandenser"
 
-echo build quandenser with vendor support (this will take a few minutes).....
-msbuild PACKAGE.vcxproj /p:Configuration=%BUILD_TYPE% /m
+  echo build quandenser with vendor support (this will take a few minutes).....
+  msbuild PACKAGE.vcxproj /p:Configuration=%BUILD_TYPE% /m
 
-::msbuild INSTALL.vcxproj /p:Configuration=%BUILD_TYPE% /m
-::msbuild RUN_TESTS.vcxproj /p:Configuration=%BUILD_TYPE% /m
+  ::msbuild INSTALL.vcxproj /p:Configuration=%BUILD_TYPE% /m
+  ::msbuild RUN_TESTS.vcxproj /p:Configuration=%BUILD_TYPE% /m
+)
 
 :::::::::::::::::::::::::::::::::::::::
 :::::::::::: END BUILD ::::::::::::::::
 :::::::::::::::::::::::::::::::::::::::
 
 echo Copying installers to %RELEASE_DIR%
-copy "%BUILD_DIR%\quandenser\quan*.exe" "%RELEASE_DIR%"
-copy "%BUILD_DIR%\quandenser-vendor-support\quan*.exe" "%RELEASE_DIR%"
+set /A exit_code=0
+call :copytorelease "%BUILD_DIR%\quandenser\quan*.exe"
+
+if "%VENDOR%" == "true" (
+  call :copytorelease "%BUILD_DIR%\quandenser-vendor-support\quan*.exe"
+)
 
 echo Finished buildscript execution in build directory %BUILD_DIR%
 
 cd /D "%SRC_DIR%"
 
-EXIT /B %errorlevel%
+EXIT /B %exit_code%
 
 :downloadfile
 PowerShell "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; (new-object System.Net.WebClient).DownloadFile('%1','%2')"
+EXIT /B
+
+:copytorelease
+echo Copying "%1" to "%RELEASE_DIR%"
+xcopy %1 "%RELEASE_DIR%" /Y
+dir %1 /b /a-d >nul 2>&1
+set /A exit_code=exit_code+%ERRORLEVEL%
 EXIT /B

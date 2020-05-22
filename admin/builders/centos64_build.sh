@@ -32,19 +32,27 @@ sudo yum install -y java-1.8.0-openjdk-devel maven
 mkdir -p ${build_dir}/tools
 cd ${build_dir}/tools
 
+# we need gcc >= 5 to compile ProteoWizard, since they use the c++14 flag
+pre=""
+if [[ $(rpm -q --queryformat '%{VERSION}' centos-release) < 8 ]]; then
+  sudo yum install -y centos-release-scl
+  sudo yum install -y devtoolset-7-gcc*
+  pre="scl enable devtoolset-7 --"
+fi
+
 if [ ! -d ${build_dir}/tools/proteowizard ]; then
-  ${src_dir}/quandenser/ext/maracluster/admin/builders/install_proteowizard.sh ${build_dir}/tools
+  ${pre} ${src_dir}/quandenser/ext/maracluster/admin/builders/install_proteowizard.sh ${build_dir}/tools
 fi
 
 mkdir -p $build_dir/quandenser
 #-----cmake-----
 cd $build_dir/quandenser;
 echo -n "cmake quandenser.....";
-cmake -DTARGET_ARCH=amd64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_PREFIX_PATH=$build_dir/tools $src_dir/quandenser;
+${pre} cmake -DTARGET_ARCH=amd64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_PREFIX_PATH=$build_dir/tools $src_dir/quandenser;
 #-----make------
 echo -n "make quandenser (this will take few minutes).....";
-make -j 4;
-make -j 4 package;
+${pre} make -j 4;
+${pre} make -j 4 package;
 sudo make install;
 
 mkdir -p $release_dir
