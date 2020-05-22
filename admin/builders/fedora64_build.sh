@@ -26,7 +26,7 @@ if [[ -z ${release_dir} ]]; then
   release_dir=${HOME}/release
 fi
 
-sudo dnf install -y gcc gcc-c++ rpm-build cmake
+sudo dnf install -y gcc gcc-c++ rpm-build cmake rsync
 sudo dnf install -y java-1.8.0-openjdk.x86_64 maven
 
 mkdir -p ${build_dir}/tools

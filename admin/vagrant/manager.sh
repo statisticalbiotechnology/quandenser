@@ -83,7 +83,7 @@ while getopts “hab:s:r:p:” OPTION; do
                     ;;
                 osx)
                     post="osx64"
-                    package_ext="dmg"
+                    package_ext="pkg"
                     vagbox_name="osx-sierra-0.3.1"
                     vagbox_url="https://vagrant-osx.nyc3.digitaloceanspaces.com/osx-sierra-0.3.1.box"
                     ;;
@@ -169,10 +169,6 @@ if [[ "$post" == "osx64" ]]; then
 # run this on the ubuntu host to support nfs shares:
 # sudo apt-get install nfs-common nfs-kernel-server
 
-# copy the PackageMaker app
-git clone https://github.com/erdnuesse/build-tools.git ${tmp_dir}/build-tools
-# install the PackageMaker app on the host
-sed -i '1i sudo hdiutil attach /vagrant/build-tools/xcode44auxtools6938114a.dmg; sudo cp -r /Volumes/Auxiliary\\ Tools/PackageMaker.app /Applications/' ${tmp_dir}/${builder}
 # the nfs share is owned by the user on the client which blocks access by the vagrant user on the host machine
 # currently, there does not seem to be a way to map the user ids for the nfs share...
 # instead, force hdiutil to use sudo to force access to the nfs share
@@ -287,6 +283,13 @@ fi
 #---------------------------------------------------------------------------------------
 vagrant up
 
+if [[ $? -eq 0 ]]; then
+  echo "Building of ${package_prefix} binaries succeeded"
+else
+  echo "Building of ${package_prefix} binaries failed"
+  alive="2"
+fi
+  
 #---------------------------------------------------------------------------------------
 # release:
 
@@ -295,12 +298,6 @@ echo "Copying ready made packages from ${tmp_dir} to ${release}"
 mkdir -p ${release};
 for package_prefix in ${package_prefixes[@]}; do
   cp -v ${tmp_dir}/${package_prefix}*.${package_ext} ${release};
-  if [[ $? -eq 0 ]]; then
-    echo "Building of ${package_prefix} binaries succeeded"
-  else
-    echo "Building of ${package_prefix} binaries failed"
-    alive="2"
-  fi
 done
 
 #---------------------------------------------------------------------------------------

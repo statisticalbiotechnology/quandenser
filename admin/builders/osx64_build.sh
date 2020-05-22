@@ -104,6 +104,16 @@ if [ ! -d ${build_dir}/tools/proteowizard ]; then
   ${src_dir}/quandenser/ext/maracluster/admin/builders/install_proteowizard.sh ${build_dir}/tools
 fi
 
+# brew has trouble installing maven+openjdk for old XCode versions
+if mvn -v; then
+  echo "Maven installed successfully"
+else
+  echo "Could not find maven, installing standalone version"
+  wget --quiet https://mirror.softaculous.com/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.zip
+  unzip apache-maven-3.6.3-bin.zip
+  export PATH="$PATH:${build_dir}/tools/apache-maven-3.6.3/bin"
+fi
+
 #-------------------------------------------
 
 mkdir -p $build_dir/quandenser

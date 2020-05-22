@@ -6,16 +6,16 @@ trap 'echo "Batch script killed"; exit 1' INT TERM
 release_dir=${HOME}/release
 
 platforms=()
-#platforms+=(osx)
+platforms+=(osx)
 platforms+=(win64)
-#platforms+=(win32)
-#platforms+=(centos)
-#platforms+=(fedora)
+platforms+=(win32)
+platforms+=(centos)
+platforms+=(fedora)
 platforms+=(ubuntu)
 
 for platform in ${platforms[@]}; do
   echo "Building $platform binaries"
-  ./manager.sh -p $platform -r ${release_dir}/$platform -a > ${platform}_output.txt 2>&1
+  ./manager.sh -p $platform -r ${release_dir}/$platform > ${platform}_output.txt 2>&1
   if [[ $? -eq 0 ]]; then
     echo "Building of ${platform} binaries succeeded"
   else

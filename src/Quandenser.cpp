@@ -16,6 +16,10 @@
 
 #include "Quandenser.h"
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 namespace quandenser {
 
 Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
