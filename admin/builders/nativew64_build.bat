@@ -50,8 +50,9 @@ if not exist "%INSTALL_DIR%\7zip" (
 )
 set ZIP_EXE="%INSTALL_DIR%\7zip\7z.exe"
 
-set CMAKE_BASE=cmake-3.13.4-win32-x86
-set CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v3.13.4/%CMAKE_BASE%.zip
+set CMAKE_VERSION=3.16.6
+set CMAKE_BASE=cmake-%CMAKE_VERSION%-win32-x86
+set CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v%CMAKE_VERSION%/%CMAKE_BASE%.zip
 if not exist "%INSTALL_DIR%\%CMAKE_BASE%" (
   echo Downloading and installing CMake
   call :downloadfile %CMAKE_URL% %INSTALL_DIR%\cmake.zip
