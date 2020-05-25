@@ -21,7 +21,7 @@ jobs:
       run: ./admin/builders/ubuntu64_build.sh -s `pwd`/.. -r `pwd`/../my_rel -b `pwd`/../my_build
 # Skip tests for now
 #    - name: test
-#      run: cd ../my_build/maracluster && sudo make install && make test ARGS="-V"
+#      run: cd ../my_build/quandenser && sudo make install && make test ARGS="-V"
     - name: Upload packages
       uses: actions/upload-artifact@v1
       with:
@@ -40,7 +40,7 @@ jobs:
       run: admin/builders/osx64_build.sh -s `pwd`/.. -r `pwd`/../my_rel -b `pwd`/../my_build
 # Skip tests for now
 #    - name: test
-#      run: cd ${HOME}/my_build/maracluster && sudo make install && make test ARGS="-V"
+#      run: cd ${HOME}/my_build/quandenser && sudo make install && make test ARGS="-V"
     - name: Upload packages
       uses: actions/upload-artifact@v1
       with:
@@ -64,7 +64,7 @@ jobs:
         CD ..
         SET base_dir=%cd%
         ECHO %base_dir%
-        CALL maracluster\admin\builders\nativew64_build.bat -s %base_dir% -r %base_dir%\my_rel -b %base_dir%\my_build
+        CALL quandenser\admin\builders\nativew64_build.bat -s %base_dir% -r %base_dir%\my_rel -b %base_dir%\my_build
     - name: Upload packages
       uses: actions/upload-artifact@v1
       with:
