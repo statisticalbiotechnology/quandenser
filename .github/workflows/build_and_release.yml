@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: preinstall
       run: sudo apt-get install libxml2-utils
     - name: create_dirs
@@ -30,6 +32,8 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -51,6 +55,8 @@ jobs:
         shell: cmd
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: CD .. || MKDIR my_rel my_build
     - name: configure_and_make
