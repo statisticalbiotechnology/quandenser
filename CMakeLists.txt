@@ -85,7 +85,7 @@ foreach (TARGET perclibrary blas fido picked_protein percolator qvality)
   target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/ext/percolator/src) # needed for CMake generated files
 endforeach()
 
-remove_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+target_compile_options(perclibrary PRIVATE -UBOOST_ERROR_CODE_HEADER_ONLY)
 
 #############################################################################
 # COMPILING DINOSAUR
