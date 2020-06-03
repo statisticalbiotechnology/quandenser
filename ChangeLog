@@ -1,3 +1,17 @@
+v0.03
+* Fixed ill-defined initialization of linkPEP threshold for match-between-runs
+* Fixed problem with specifying consensus spectrum file (#4)
+* Fixed counting feature match candidates
+* Reproducible results in Dinosaur given random seed
+* Check for nan and inf values for alignment RMSE (#12)
+* Resolves duplicate retention time knots issue (#12)
+* Added minimum retention time pairs/knots check (#13)
+* Fixed setting maracluster pval threshold (#15)
+* Added decoy offset as command line argument
+* Added functionality to save featureToGroup map to disk (#18)
+* Added functionality to write features and matches to temporary files (#18)
+* Temporarily fixed MzML format from 2020 Proteowizard output that causes dinosaur to hang (#20)
+
 v0.02
 * Updated MaRaCluster and Proteowizard dependencies to latest version
 * Fixed building scripts for all platforms

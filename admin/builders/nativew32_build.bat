@@ -44,8 +44,9 @@ if not exist "%INSTALL_DIR%\7zip" (
 )
 set ZIP_EXE="%INSTALL_DIR%\7zip\7z.exe"
 
-set CMAKE_BASE=cmake-3.13.4-win32-x86
-set CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v3.13.4/%CMAKE_BASE%.zip
+set CMAKE_VERSION=3.16.6
+set CMAKE_BASE=cmake-%CMAKE_VERSION%-win32-x86
+set CMAKE_URL=https://github.com/Kitware/CMake/releases/download/v%CMAKE_VERSION%/%CMAKE_BASE%.zip
 if not exist "%INSTALL_DIR%\%CMAKE_BASE%" (
   echo Downloading and installing CMake
   call :downloadfile %CMAKE_URL% %INSTALL_DIR%\cmake.zip
@@ -152,7 +153,7 @@ if not exist "%PWIZ_DIR%\lib" (
   ::: copy the boost::asio library, which is not included by the ProteoWizard boost tar but is needed for maracluster
   call :downloadfile "%BOOST_ASIO_URL%" %INSTALL_DIR%\boost_asio.zip
   %ZIP_EXE% x "%INSTALL_DIR%\boost_asio.zip" -o"%INSTALL_DIR%" -aoa > NUL
-  PowerShell "Copy-Item -Path '%INSTALL_DIR%\%BOOST_ASIO_BASE%\boost' -Destination '%PWIZ_DIR%\libraries\boost_1_67_0' -Recurse"
+  PowerShell "Copy-Item -Path '%INSTALL_DIR%\%BOOST_ASIO_BASE%\boost' -Destination '%PWIZ_DIR%\libraries\boost_1_67_0' -Recurse -Force"
 )
 
 set MVN_BASE=apache-maven-3.6.3

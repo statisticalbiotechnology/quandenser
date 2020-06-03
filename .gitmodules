@@ -7,6 +7,3 @@
 [submodule "ext/percolator"]
 	path = ext/percolator
 	url = https://github.com/percolator/percolator.git
-[submodule "ext/proteomicore"]
-	path = ext/proteomicore
-	url = https://github.com/MatthewThe/proteomicore.git

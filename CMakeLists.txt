@@ -85,6 +85,8 @@ foreach (TARGET perclibrary blas fido picked_protein percolator qvality)
   target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/ext/percolator/src) # needed for CMake generated files
 endforeach()
 
+target_compile_options(perclibrary PRIVATE -UBOOST_ERROR_CODE_HEADER_ONLY)
+
 #############################################################################
 # COMPILING DINOSAUR
 #############################################################################
@@ -97,20 +99,13 @@ endif (MSVC)
 
 MESSAGE( STATUS "Building Dinosaur with Maven" )
 
-# There is currently a bug in the MzML reader. Until the pull request (https://github.com/fickludd/proteomicore/pull/1) is merged, we build it ourselves with the fix included
-execute_process(COMMAND ${MVN_CMD} install -Pconf -Dmaven.source.skip -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/proteomicore/io/MzML WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/proteomicore/io/MzML OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/proteomicore_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/proteomicore_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
-
-if(NOT "${MVN_RESULT}" STREQUAL "0")
-  message(FATAL_ERROR "Cannot create module Proteomicore, mvn execution failed: ${MVN_RESULT}")
-endif()
-
 execute_process(COMMAND ${MVN_CMD} package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
 
 if(NOT "${MVN_RESULT}" STREQUAL "0")
   message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed: ${MVN_RESULT}")
 endif()
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.1.4.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.2.0.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
 
 ###############################################################################
 # COMPILING QUANDENSER
