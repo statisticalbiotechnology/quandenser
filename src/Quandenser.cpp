@@ -782,7 +782,7 @@ int Quandenser::run() {
           (boost::filesystem::exists("pair/file1/" + fn2) ||
            boost::filesystem::exists("pair/file2/" + fn2))) {
         std::string savedAddedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
-        size_t addedFts = allFeatures.at(fileidx2).loadFromFile(savedAddedFeaturesFile);
+        size_t addedFts = allFeatures.at(fileidx2).loadFromFileCheckDuplicates(savedAddedFeaturesFile);
         std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile << std::endl;
         featuresAdded[fileidx2] = true;
       }
