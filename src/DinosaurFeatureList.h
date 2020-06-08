@@ -96,7 +96,7 @@ class DinosaurFeatureList {
   size_t loadFromFile(const std::string& ftFile, bool withIdxMap = false) {
     std::vector<DinosaurFeature> addedFts;
     maracluster::BinaryInterface::read(ftFile, addedFts);
-    features_.reserve(addedFts.size());
+    features_.reserve(features_.size() + addedFts.size());
     for (DinosaurFeature& df : addedFts) {
       if (withIdxMap) {
         push_back(df);
@@ -110,7 +110,6 @@ class DinosaurFeatureList {
   size_t loadFromFileCheckDuplicates(const std::string& ftFile, bool withIdxMap = false) {
     std::vector<DinosaurFeature> addedFts;
     maracluster::BinaryInterface::read(ftFile, addedFts);
-    features_.reserve(addedFts.size());
     for (DinosaurFeature& df : addedFts) {
       if (getFeatureIdx(df) == -1) { // this mimicks the MBR feature adding
         df.featureIdx = size(); // re-index before adding to the featurelist

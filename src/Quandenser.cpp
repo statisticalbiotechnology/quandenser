@@ -668,7 +668,8 @@ int Quandenser::run() {
           boost::filesystem::exists("pair/file2/" + fn) ||
           parallel_4_) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
-        size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile);
+        bool withIdxMap = true;
+        size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
         std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
       }
       ++fileIdx;
@@ -760,36 +761,73 @@ int Quandenser::run() {
     int fileidx1, fileidx2;
     int loop_counter = 0;  // Used for parallelization
     std::vector<bool> featuresAdded(fileList.size());
+    size_t originalNumFeaturesFromFile = 0;
     while (infile >> round >> tmp1 >> tmp2 >> fileidx1 >> fileidx2) {
       FilePair filePair(fileidx1, fileidx2);
 
       boost::filesystem::path file1(fileList.getFilePath(fileidx1));
       boost::filesystem::path file2(fileList.getFilePath(fileidx2));
-      std::string fn1(file1.filename().string());
-      std::string fn2(file2.filename().string());
+      std::string alignFromFile(file1.filename().string());
+      std::string alignToFile(file2.filename().string());
 
       // Parallel_3 injection. Will only run a pair if it exists in pair/ folder and is as assigned round
       // NOTE: In AlignRetention.cpp, line 197: A run is limited by which round it is, needs to be in order
       if (parallel_4_) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
-      } else if (boost::filesystem::exists("pair/file1/" + fn1) &&
-                 boost::filesystem::exists("pair/file2/" + fn2)) {
+      } else if (boost::filesystem::exists("pair/file1/" + alignFromFile) &&
+                 boost::filesystem::exists("pair/file2/" + alignToFile)) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
         addedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
         if (featuresAdded[fileidx1]) allFeatures.at(fileidx1).sortByPrecMz();
         if (featuresAdded[fileidx2]) allFeatures.at(fileidx2).sortByPrecMz();
+        
+        if (!tmpFilePrefixAlign.empty()) {
+          std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+          bool append = false;
+          allFeatures.at(fileidx2).saveToFile(fileName, append);
+        }
       } else if (loop_counter < parallel_3_ - 1 &&  // -1 because parallel_3_ is added +1 from actual depth
-          (boost::filesystem::exists("pair/file1/" + fn2) ||
-           boost::filesystem::exists("pair/file2/" + fn2))) {
+          (boost::filesystem::exists("pair/file1/" + alignToFile) ||
+           boost::filesystem::exists("pair/file2/" + alignToFile))) {
         std::string savedAddedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
         size_t addedFts = allFeatures.at(fileidx2).loadFromFileCheckDuplicates(savedAddedFeaturesFile);
         std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile << std::endl;
         featuresAdded[fileidx2] = true;
+        
+        // update --use-tmp-files match files for matchFrom run 
+        if (boost::filesystem::exists("pair/file1/" + alignToFile) && !tmpFilePrefixAlign.empty()) {
+          if (originalNumFeaturesFromFile == 0) {
+            originalNumFeaturesFromFile = allFeatures.at(fileidx2).size() - addedFts;
+          }
+          
+          DinosaurFeatureList addedFeatures;
+          addedFeatures.loadFromFileCheckDuplicates(savedAddedFeaturesFile);
+            
+          std::string matchesFileName = tmpFilePrefixAlign + "/matches."  +
+              boost::lexical_cast<std::string>(filePair.fileIdx1) + "." +
+              boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+          std::map<int, FeatureIdxMatch> featureMatches;
+          FeatureAlignment::loadFromFile(matchesFileName, featureMatches);
+          
+          std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
+          for (ftIdxMatchIt = featureMatches.begin(); 
+               ftIdxMatchIt != featureMatches.end();
+               ++ftIdxMatchIt) {
+            int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
+            if (targetFeatureIdx >= originalNumFeaturesFromFile) {
+              ftIdxMatchIt->second.targetFeatureIdx = 
+                allFeatures.at(fileidx2).getFeatureIdx(addedFeatures.at(targetFeatureIdx - originalNumFeaturesFromFile));
+            }
+          }
+          
+          bool append = false;
+          FeatureAlignment::saveToFile(matchesFileName, featureMatches, append);
+        }
       }
       loop_counter++;
     }
     infile.close();
-
+    
     // Load state of alignRetention
     alignRetention.LoadState();
     std::cout << "Parallel 3/4: Loading completed" << std::endl;

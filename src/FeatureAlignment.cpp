@@ -74,7 +74,7 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     DinosaurFeatureList& featuresTargetRun,
     const std::string& addedFeaturesFile,
     const std::string& tmpFilePrefix) {
-  if (!tmpFilePrefix.empty()) {
+  if (!tmpFilePrefix.empty() && addedFeaturesFile.empty()) {
     std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx1) + ".dat";
     featuresQueryRun.loadFromFile(fileName);
 
@@ -265,12 +265,13 @@ void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
       std::string peptide = reader.readString();
       std::string targetSpecId = peptide.substr(2, peptide.size() - 4);
       DinosaurFeature targetFt = parsePsmIdAsFeature(targetSpecId);
-      if (targetFt.featureIdx < 0) {
+      if (targetFt.featureIdx < 0) { // Dinosaur targeted mode
         DinosaurFeature& candFt = candidateFeaturesTargetRun.at(
             getCandidatePos(targetFt.featureIdx));
-        candFt.featureIdx = featuresTargetRun.getFeatureIdx(candFt);
+        // check if the target feature was already added
+        candFt.featureIdx = featuresTargetRun.getFeatureIdx(candFt); 
         if (candFt.featureIdx < 0) {
-          candFt.featureIdx = featuresTargetRun.size() + addedTargetFeatures.size();
+          candFt.featureIdx = featuresTargetRun.size();
           candFt.fileIdx = targetFileIdx;
           featuresTargetRun.push_back(candFt);
           if (!addedFeaturesFile.empty()) {
