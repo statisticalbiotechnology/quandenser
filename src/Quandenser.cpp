@@ -688,13 +688,15 @@ int Quandenser::run() {
       return EXIT_FAILURE;
     }
     tmpFilePrefixAlign = tmpFileFolder.string();
-
-    for (size_t i = 0; i < allFeatures.size(); ++i) {
-      std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
-      remove(fileName.c_str());
-      bool append = false;
-      allFeatures.at(i).saveToFile(fileName, append);
-      allFeatures.at(i).clear();
+    
+    if (!parallel_3_ && !parallel_4_) {
+      for (size_t i = 0; i < allFeatures.size(); ++i) {
+        std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
+        remove(fileName.c_str());
+        bool append = false;
+        allFeatures.at(i).saveToFile(fileName, append);
+        allFeatures.at(i).clear();
+      }
     }
   }
 
@@ -807,22 +809,27 @@ int Quandenser::run() {
           std::string matchesFileName = tmpFilePrefixAlign + "/matches."  +
               boost::lexical_cast<std::string>(filePair.fileIdx1) + "." +
               boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
-          std::map<int, FeatureIdxMatch> featureMatches;
-          FeatureAlignment::loadFromFile(matchesFileName, featureMatches);
+          std::string matchesFileNameBackup = matchesFileName + ".bak";
           
-          std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
-          for (ftIdxMatchIt = featureMatches.begin(); 
-               ftIdxMatchIt != featureMatches.end();
-               ++ftIdxMatchIt) {
-            int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
-            if (targetFeatureIdx >= originalNumFeaturesFromFile) {
-              ftIdxMatchIt->second.targetFeatureIdx = 
-                allFeatures.at(fileidx2).getFeatureIdx(addedFeatures.at(targetFeatureIdx - originalNumFeaturesFromFile));
+          if (!boost::filesystem::exists(matchesFileNameBackup)) {
+            std::map<int, FeatureIdxMatch> featureMatches;
+            FeatureAlignment::loadFromFile(matchesFileName, featureMatches);
+            rename(matchesFileName.c_str(), matchesFileNameBackup.c_str());
+            
+            std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
+            for (ftIdxMatchIt = featureMatches.begin(); 
+                 ftIdxMatchIt != featureMatches.end();
+                 ++ftIdxMatchIt) {
+              int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
+              if (targetFeatureIdx >= originalNumFeaturesFromFile) {
+                ftIdxMatchIt->second.targetFeatureIdx = 
+                  allFeatures.at(fileidx2).getFeatureIdx(addedFeatures.at(targetFeatureIdx - originalNumFeaturesFromFile));
+              }
             }
+            
+            bool append = false;
+            FeatureAlignment::saveToFile(matchesFileName, featureMatches, append);
           }
-          
-          bool append = false;
-          FeatureAlignment::saveToFile(matchesFileName, featureMatches, append);
         }
       }
       loop_counter++;
