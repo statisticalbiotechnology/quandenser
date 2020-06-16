@@ -33,7 +33,7 @@ void FeatureGroups::singleLinkClustering(
     std::map<FilePair, std::map<int, FeatureIdxMatch> >& featureMatches,
     const std::string& tmpFilePrefixGroup,
     const std::string& tmpFilePrefixAlign) {
-  size_t numFiles = featureMatches.size() / 2 + 1;
+  size_t numFiles = featureAlignmentQueue.size() / 2 + 1;
   std::vector<FeatureToGroupMap> featureIdToGroupId(numFiles);
   std::map<size_t, size_t> groupIdMap;
   

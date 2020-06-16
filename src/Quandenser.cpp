@@ -666,7 +666,7 @@ int Quandenser::run() {
       // Check if the pair assigned exists in the pair folder
       if (boost::filesystem::exists("pair/file1/" + fn) ||
           boost::filesystem::exists("pair/file2/" + fn) ||
-          parallel_4_) {
+          (parallel_4_ && !useTempFiles_)) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
         bool withIdxMap = true;
         size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
@@ -758,15 +758,20 @@ int Quandenser::run() {
 
     // Load state of featureAlignmentQueue
     std::ifstream infile(featureAlignFile.string().c_str(), ios::in);
-    int round;
+    int round, prevRound = -1;
     std::string tmp1, tmp2;
     int fileidx1, fileidx2;
     int loop_counter = 0;  // Used for parallelization
     std::vector<bool> featuresAdded(fileList.size());
     size_t originalNumFeaturesFromFile = 0;
     while (infile >> round >> tmp1 >> tmp2 >> fileidx1 >> fileidx2) {
+      if (round != prevRound) {
+        prevRound = round;
+        originalNumFeaturesFromFile = 0;
+      }
+      
       FilePair filePair(fileidx1, fileidx2);
-
+      
       boost::filesystem::path file1(fileList.getFilePath(fileidx1));
       boost::filesystem::path file2(fileList.getFilePath(fileidx2));
       std::string alignFromFile(file1.filename().string());
@@ -784,9 +789,10 @@ int Quandenser::run() {
         if (featuresAdded[fileidx2]) allFeatures.at(fileidx2).sortByPrecMz();
         
         if (!tmpFilePrefixAlign.empty()) {
-          std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+          std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(fileidx1) + ".dat";
+          std::cerr << "Writing updated features to " << fileName << std::endl;
           bool append = false;
-          allFeatures.at(fileidx2).saveToFile(fileName, append);
+          allFeatures.at(fileidx1).saveToFile(fileName, append);
         }
       } else if (loop_counter < parallel_3_ - 1 &&  // -1 because parallel_3_ is added +1 from actual depth
           (boost::filesystem::exists("pair/file1/" + alignToFile) ||
@@ -794,7 +800,8 @@ int Quandenser::run() {
         std::string savedAddedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
         bool withIdxMap = true;
         size_t addedFts = allFeatures.at(fileidx2).loadFromFileCheckDuplicates(savedAddedFeaturesFile, withIdxMap);
-        std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile << std::endl;
+        std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile 
+                  << " (total: " << allFeatures.at(fileidx2).size() << " features)" << std::endl;
         featuresAdded[fileidx2] = true;
         
         // update --use-tmp-files match files for matchFrom run 
@@ -812,9 +819,9 @@ int Quandenser::run() {
           std::string matchesFileNameBackup = matchesFileName + ".bak";
           
           if (!boost::filesystem::exists(matchesFileNameBackup)) {
-            std::map<int, FeatureIdxMatch> featureMatches;
-            FeatureAlignment::loadFromFile(matchesFileName, featureMatches);
             rename(matchesFileName.c_str(), matchesFileNameBackup.c_str());
+            std::map<int, FeatureIdxMatch> featureMatches;
+            FeatureAlignment::loadFromFile(matchesFileNameBackup, featureMatches);
             
             std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
             for (ftIdxMatchIt = featureMatches.begin(); 
@@ -864,13 +871,16 @@ int Quandenser::run() {
 	FeatureAlignment featureAlignment(percolatorFolder.string(), percolatorArgs_,
 		      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_,
 		      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
-
-  featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
+  
+  if (!(parallel_4_ && useTempFiles_)) {
+    featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
+  }
 
   if (parallel_3_) {  // parallel 3 runs dinosaur.
     std::cout << "Parallel stop 3 reached" << std::endl;
     return EXIT_SUCCESS;
   }
+  
   /* sort features by index before feature groups processing */
   std::vector<DinosaurFeatureList>::iterator ftListIt;
   for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {

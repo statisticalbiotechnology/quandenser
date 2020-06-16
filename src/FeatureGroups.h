@@ -58,6 +58,7 @@ class FeatureToGroupMap {
     return featureIdToGroupId_.find(n) != featureIdToGroupId_.end();
   }
   inline void clear() { featureIdToGroupId_.clear(); }
+  inline size_t size() const { return featureIdToGroupId_.size(); }
   
   size_t getGroupId(const size_t n, const std::map<size_t, size_t>& groupIdMap) {
     size_t clusterIdx = featureIdToGroupId_.at(n);
