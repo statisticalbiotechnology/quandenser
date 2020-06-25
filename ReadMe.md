@@ -8,6 +8,8 @@ An installer for all major platforms (Windows, OS X, Ubuntu, etc.) can be found 
 
 If you prefer to compile from source, or are running on a different operating system, [click here](#installation-from-source).
 
+Note that we also provide Docker and Singularity support through the [Quandenser-pipeline project](https://github.com/statisticalbiotechnology/quandenser-pipeline).
+
 ## Interface
 
 Usage:
@@ -25,6 +27,8 @@ If everything executed correctly, you will find a file with the quantified featu
 An example run including downstream analysis with [Triqler](https://github.com/statisticalbiotechnology/triqler) can be found here: https://app.box.com/s/kp4219dc22l3gq27014nms8oco594c2i
 
 The folder contains a ReadMe file with instructions on how to run the example.
+
+Note that this same pipeline is also implemented in the [Quandenser-pipeline project](https://github.com/statisticalbiotechnology/quandenser-pipeline), which allows users to run the entire pipeline from RAW files to Triqler results using [Nextflow](https://www.nextflow.io/) with pre-built [Singularity](https://sylabs.io/docs/) or [Docker](https://www.docker.com/) images.
 
 ## Installation from source
 
