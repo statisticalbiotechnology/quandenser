@@ -76,13 +76,13 @@ class Quandenser {
   float linkPEPThreshold_, linkPEPMbrSearchThreshold_;
   int maxFeatureCandidates_;
 
-  int parallel_1_;
-  int parallel_2_;
-  int parallel_3_;
-  int parallel_4_;
+  int partial1Dinosaur_;
+  bool partial2MaRaCluster_;
+  int partial3MatchRound_;
+  bool partial4Consensus_;
 	bool useTempFiles_;
 
-  void runMaRaCluster(const std::string& maRaClusterSubFolder,
+  int runMaRaCluster(const std::string& maRaClusterSubFolder,
     const maracluster::SpectrumFileList& fileList,
     std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
@@ -92,11 +92,26 @@ class Quandenser {
   void loadAllFeatures(const std::string& tmpFilePrefixAlign,
     std::vector<DinosaurFeatureList>& allFeatures);
   void unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures);
-  std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
+  
+  int saveAlignmentQueue(
+    std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
+    const std::string& featureAlignQueueFile,
+    maracluster::SpectrumFileList& fileList);
+  
+  void updateMatchesTmpFile(
+    const boost::filesystem::path& matchesTmpFileBaserefixAlign, 
+    const FilePair& filePair, 
+    const DinosaurFeatureList& currentFeatures, 
+    const DinosaurFeatureList& addedFeatures,
+    const size_t originalNumFeaturesFromFile);
+    
+  std::string getFeatureFN(const boost::filesystem::path& basePath,
                            size_t fileIdx);
-  std::string getFeatureFN(const boost::filesystem::path& featureOutFile,
+  std::string getAddedFeaturesFN(const boost::filesystem::path& basePath,
                            size_t fileIdx1, size_t fileIdx2);
-
+  
+  int createDirectory(boost::filesystem::path dirPath);
+  
   // google analytics
   static bool parseUrl(std::string url, std::string* host, std::string* path);
   static void httpRequest(const std::string& url, const std::string& data);

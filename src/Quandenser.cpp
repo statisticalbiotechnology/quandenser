@@ -20,6 +20,8 @@
 #include <omp.h>
 #endif
 
+namespace fs = boost::filesystem;
+
 namespace quandenser {
 
 Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
@@ -30,7 +32,8 @@ Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
     decoyOffset_(5.0 * 1.000508),
     linkPEPThreshold_(0.25), linkPEPMbrSearchThreshold_(0.05),
     maxFeatureCandidates_(2),  useTempFiles_(false),
-    parallel_1_(0), parallel_2_(0), parallel_3_(0), parallel_4_(0) {}
+    partial1Dinosaur_(-1), partial2MaRaCluster_(false), 
+    partial3MatchRound_(-1), partial4Consensus_(false) {}
 
 std::string Quandenser::greeter() {
   std::ostringstream oss;
@@ -163,21 +166,23 @@ bool Quandenser::parseOptions(int argc, char **argv) {
       "Minimum posterior error probability for re-searching for a feature with a targeted search. Setting this to 1.0 will cause the targeted search to be skipped (lowest: 0.0, highest: 1.0, default: 0.05).",
       "double");
   cmd.defineOption("W",
-      "parallel-1",
-      "Parallel quandenser, stop1",
+      "partial-1-dinosaur",
+      "Partial run step 1. Runs the initial Dinosaur feature finding runs. Specify either the file index as specified in the batch input file (starting with file index 1), or specify 0 to process all files in one go.",
       "int");
   cmd.defineOption("X",
-      "parallel-2",
-      "Parallel quandenser, stop2",
-      "int");
+      "partial-2-maracluster",
+      "Partial run step 2. Runs the first MaRaCluster run and the retention time alignments.",
+      "",
+      TRUE_IF_SET);
   cmd.defineOption("Y",
-      "parallel-3",
-      "Parallel quandenser, stop3",
+      "partial-3-match-round",
+      "Partial run step 3. Runs a feature matching round from the minimum spanning tree of run alignments. Specify either the round number as specified in the feature alignment queue (starting at round 1), or specify 0 to process all rounds in one go.",
       "int");
   cmd.defineOption("Z",
-      "parallel-4",
-      "Parallel quandenser, stop4",
-      "int");
+      "partial-4-consensus",
+      "Partial run step 4. Runs second MaRaCluster run, creates and write feature groups and consensus spectra.",
+      "",
+      TRUE_IF_SET);
   cmd.defineOption(Option::EXPERIMENTAL_FEATURE,
       "decoy-offset",
       "Decoy m/z offset (lowest: -1000.0, highest: 1000.0, default: 5.0 * 1.000508).",
@@ -311,20 +316,20 @@ bool Quandenser::parseOptions(int argc, char **argv) {
     maxFeatureCandidates_ = cmd.getDouble("target-search-threshold", 0.0, 1.0);
   }
 
-  if (cmd.optionSet("parallel-1")) {
-    parallel_1_ = 1;
+  if (cmd.optionSet("partial-1-dinosaur")) {
+    partial1Dinosaur_ = cmd.getInt("partial-1-dinosaur", 0, 99999);
   }
 
-  if (cmd.optionSet("parallel-2")) {
-    parallel_2_ = 1;
+  if (cmd.optionSet("partial-2-maracluster")) {
+    partial2MaRaCluster_ = true;
   }
 
-  if (cmd.optionSet("parallel-3")) {
-    parallel_3_ = cmd.getInt("parallel-3", 0, 99999);  // Maximum depth is 99999
+  if (cmd.optionSet("partial-3-match-round")) {
+    partial3MatchRound_ = cmd.getInt("partial-3-match-round", 0, 99999);
   }
 
-  if (cmd.optionSet("parallel-4")) {
-    parallel_4_ = 1;
+  if (cmd.optionSet("partial-4-consensus")) {
+    partial4Consensus_ = true;
   }
 
   if (cmd.optionSet("decoy-offset")) {
@@ -351,14 +356,14 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   return true;
 }
 
-void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
+int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
     const maracluster::SpectrumFileList& fileList,
     std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap,
     const std::string& tmpFilePrefixAlign) {
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
-  boost::filesystem::path maraclusterFolder(outputFolder_);
+  fs::path maraclusterFolder(outputFolder_);
   maraclusterFolder /= maRaClusterSubFolder;
   maraclusterArgs[1] = "batch";
   maraclusterArgs.push_back("--output-folder");
@@ -368,16 +373,20 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   MaRaClusterAdapter maraclusterAdapter(allFeatures, spectrumToPrecursorMap, spectrumOutputFile);
   maraclusterAdapter.parseOptions(maraclusterArgs);
 
-  boost::filesystem::path spectrumToPrecursorFilePath(maraclusterFolder);
+  fs::path spectrumToPrecursorFilePath(maraclusterFolder);
   spectrumToPrecursorFilePath /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
   std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
 
-  if (!boost::filesystem::exists(spectrumToPrecursorFile)) {
+  if (!fs::exists(spectrumToPrecursorFile)) {
     if (useTempFiles_) {
       loadAllFeatures(tmpFilePrefixAlign, allFeatures);
     }
 
-    maraclusterAdapter.run();
+    int rc = maraclusterAdapter.run();
+    if (rc != EXIT_SUCCESS) {
+      std::cerr << "MaRaCluster failed with exit code " << rc << ". Terminating.." << std::endl;
+      return rc;
+    }
 
     if (useTempFiles_) {
       unloadAllFeatures(allFeatures);
@@ -399,26 +408,50 @@ void Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   }
 
   clusterFilePath = maraclusterAdapter.getClusterFileName();
+  return EXIT_SUCCESS;
+}
+
+int Quandenser::saveAlignmentQueue(
+    std::vector<std::pair<int, FilePair> >& featureAlignmentQueue,
+    const std::string& featureAlignQueueFile,
+    maracluster::SpectrumFileList& fileList) {
+  std::ofstream outfile(featureAlignQueueFile.c_str(), ios::out);
+  if (outfile.is_open()) {
+    std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
+    for (filePairIt = featureAlignmentQueue.begin();
+          filePairIt != featureAlignmentQueue.end(); ++filePairIt) {
+      FilePair filePair = filePairIt->second;
+      int round = filePairIt->first + 1;
+      fs::path file1(fileList.getFilePath(filePair.fileIdx1));
+      fs::path file2(fileList.getFilePath(filePair.fileIdx2));
+      // Serialized output stream
+      outfile << round << '\t' << file1.string() << '\t' << file2.string()
+              << '\t' << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << std::endl;
+    }
+    outfile.close();
+    return EXIT_SUCCESS;
+  } else {
+    std::cerr << "ERROR: Could not open " << featureAlignQueueFile
+        << " for writing the feature alignment queue." << std::endl;
+    return EXIT_FAILURE;
+  }
 }
 
 std::string Quandenser::getFeatureFN(
-    const boost::filesystem::path& featureOutFile, size_t fileIdx) {
-  return featureOutFile.string() + "." +
-    boost::lexical_cast<std::string>(fileIdx) + ".dat";
+    const fs::path& basePath, size_t fileIdx) {
+  return FeatureAlignment::getFeatureFN(basePath.string(), fileIdx);
 }
 
-std::string Quandenser::getFeatureFN(
-    const boost::filesystem::path& featureOutFile,
+std::string Quandenser::getAddedFeaturesFN(
+    const fs::path& basePath,
     size_t fileIdx1, size_t fileIdx2) {
-  return featureOutFile.string() + "." +
-    boost::lexical_cast<std::string>(fileIdx1) + "_" +
-    boost::lexical_cast<std::string>(fileIdx2) + ".dat";
+  return FeatureAlignment::getAddedFeaturesFN(basePath.string(), fileIdx1, fileIdx2);
 }
 
 void Quandenser::loadAllFeatures(const std::string& tmpFilePrefixAlign,
     std::vector<DinosaurFeatureList>& allFeatures) {
   for (size_t i = 0; i < allFeatures.size(); ++i) {
-    std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
+    std::string fileName = getFeatureFN(fs::path(tmpFilePrefixAlign) / "features", i);
     allFeatures.at(i).loadFromFile(fileName);
     if (Globals::VERB > 2) {
       std::cerr << "Read in " << allFeatures.at(i).size() << " features from " << fileName << std::endl;
@@ -429,6 +462,48 @@ void Quandenser::loadAllFeatures(const std::string& tmpFilePrefixAlign,
 void Quandenser::unloadAllFeatures(std::vector<DinosaurFeatureList>& allFeatures) {
   for (size_t i = 0; i < allFeatures.size(); ++i) {
     allFeatures.at(i).clear();
+  }
+}
+
+void Quandenser::updateMatchesTmpFile(const fs::path& matchesTmpFileBase, 
+    const FilePair& filePair, 
+    const DinosaurFeatureList& currentFeatures, 
+    const DinosaurFeatureList& addedFeatures,
+    const size_t originalNumFeaturesFromFile) {          
+  std::string matchesFileName = getAddedFeaturesFN(
+      matchesTmpFileBase, filePair.fileIdx1, filePair.fileIdx2);
+  std::string matchesFileNameBackup = matchesFileName + ".bak";
+  if (!fs::exists(matchesFileNameBackup)) {
+    rename(matchesFileName.c_str(), matchesFileNameBackup.c_str());
+    std::map<int, FeatureIdxMatch> featureMatches;
+    FeatureAlignment::loadFromFile(matchesFileNameBackup, featureMatches);
+    
+    std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
+    for (ftIdxMatchIt = featureMatches.begin(); 
+         ftIdxMatchIt != featureMatches.end();
+         ++ftIdxMatchIt) {
+      int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
+      if (targetFeatureIdx >= originalNumFeaturesFromFile) {
+        ftIdxMatchIt->second.targetFeatureIdx = 
+          currentFeatures.getFeatureIdx(addedFeatures.at(targetFeatureIdx - originalNumFeaturesFromFile));
+      }
+    }
+    
+    bool append = false;
+    FeatureAlignment::saveToFile(matchesFileName, featureMatches, append);
+  }
+}
+
+int Quandenser::createDirectory(fs::path dirPath) {
+  boost::system::error_code returnedError;
+  
+  fs::create_directories(dirPath, returnedError);
+  if (!fs::exists(dirPath)) {
+    std::cerr << "Error: could not create output directory at "
+        << dirPath.string() << std::endl;
+    return EXIT_FAILURE;
+  } else {
+    return EXIT_SUCCESS;
   }
 }
 
@@ -557,13 +632,12 @@ int Quandenser::run() {
 
   boost::system::error_code returnedError;
 
-  boost::filesystem::path rootPath(outputFolder_);
-  boost::filesystem::create_directories(rootPath, returnedError);
-  if (!boost::filesystem::exists(rootPath)) {
-    std::cerr << "Error: could not create output directory at "
-        << outputFolder_ << std::endl;
-    return EXIT_FAILURE;
-  }
+  fs::path rootPath(outputFolder_);
+  int rc = createDirectory(rootPath);
+  if (rc != EXIT_SUCCESS) return rc;
+    
+  bool isPartialRun = (partial1Dinosaur_ >= 0 || partial2MaRaCluster_ 
+                       || partial3MatchRound_ >= 0 || partial4Consensus_);
 
   /*****************************************************************************
     Step 0: Read in the input text file with a list of mzML files
@@ -572,70 +646,80 @@ int Quandenser::run() {
   maracluster::SpectrumFileList fileList;
   fileList.initFromFile(spectrumBatchFileFN_);
 
-  if (fileList.size() < 2u && !parallel_1_) {
+  if (fileList.size() < 2u && partial1Dinosaur_ <= 0) {
     std::cerr << "Error: less than 2 spectrum files were specified, "
         << "Quandenser needs at least two files to perform a "
         << "meaningful alignment." << std::endl;
     return EXIT_FAILURE;
+  }
+  
+  if (maxMissingValues_ < 0) {
+    maxMissingValues_ = fileList.size() / 4;
   }
 
   /*****************************************************************************
     Step 1: Detect MS1 features with Dinosaur
    ****************************************************************************/
 
-  boost::filesystem::path dinosaurFolder(rootPath);
+  fs::path dinosaurFolder(rootPath);
   dinosaurFolder /= "dinosaur";
-  boost::filesystem::create_directories(dinosaurFolder, returnedError);
-  if (!boost::filesystem::exists(dinosaurFolder)) {
-    std::cerr << "Error: could not create output directory at "
-        << dinosaurFolder.string() << std::endl;
-    return EXIT_FAILURE;
+  rc = createDirectory(dinosaurFolder);
+  if (rc != EXIT_SUCCESS) return rc;
+  
+  /* binary feature file base path */
+  fs::path featureOutFile(dinosaurFolder);
+  featureOutFile /= "features";
+  
+  std::string tmpFilePrefixAlign = "";
+  if (useTempFiles_) {
+    fs::path tmpFileFolder(rootPath);
+    tmpFileFolder /= "tmp";
+    tmpFileFolder /= "matchFeatures";
+    rc = createDirectory(tmpFileFolder);
+    if (rc != EXIT_SUCCESS) return rc;
+    
+    tmpFilePrefixAlign = tmpFileFolder.string();
   }
 
-  std::vector<boost::filesystem::path> dinosaurFeatureFiles;
-
   std::vector<std::string> files = fileList.getFilePaths();
-  for (std::vector<std::string>::const_iterator it = files.begin(); it != files.end(); ++it) {
-    if (maracluster::MSFileHandler::getOutputFormat(*it) != "mzml") {
+  if (partial1Dinosaur_ > 0) {
+    files = std::vector<std::string>(1, files.at(partial1Dinosaur_ - 1));
+  }
+  std::vector<fs::path> dinosaurFeatureFiles;
+  std::vector<std::string>::const_iterator it = files.begin();
+  for ( ; it != files.end(); ++it) {
+    if (maracluster::MSFileHandler::getOutputFormat(*it) != "mzml" && Globals::VERB > 0) {
       std::cerr << "Warning: file extension is not .mzML, ignoring file: " << *it << std::endl;
     }
-    boost::filesystem::path mzMLFile(*it);
-
-    boost::filesystem::path dinosaurFeatureFile(dinosaurFolder.string());
+    fs::path mzMLFile(*it);
+    fs::path dinosaurFeatureFile(dinosaurFolder.string());
 
     /* TODO: what if we use files with the same filename but in different folders? */
     dinosaurFeatureFile /= mzMLFile.stem().string() + ".features.tsv";
     dinosaurFeatureFiles.push_back(dinosaurFeatureFile);
-    if (!boost::filesystem::exists(dinosaurFeatureFile)) {
+    if (!fs::exists(dinosaurFeatureFile)) {
       if (Globals::VERB > 1) {
         std::cerr << "Processing " << mzMLFile.filename() << " with Dinosaur." << std::endl;
       }
-      int rc = DinosaurIO::runDinosaurGlobal(dinosaurFolder.string(), mzMLFile.string());
+      rc = DinosaurIO::runDinosaurGlobal(dinosaurFolder.string(), mzMLFile.string());
       if (rc != EXIT_SUCCESS) {
         std::cerr << "Dinosaur failed with exit code " << rc << ". Terminating.." << std::endl;
         return EXIT_FAILURE;
       }
-    } else {
-      if (Globals::VERB > 1) {
-        std::cerr << "Already processed " << mzMLFile.filename() << " with Dinosaur." << std::endl;
-      }
+    } else if (Globals::VERB > 1) {
+      std::cerr << "Already processed " << mzMLFile.filename() << " with Dinosaur." << std::endl;
     }
   }
-  if (parallel_1_) {
-    std::cout << "Parallel stop 1 reached" << std::endl;
-    return EXIT_SUCCESS;
-  }
-
-  boost::filesystem::path featureOutFile(outputFolder_);
-  featureOutFile /= "dinosaur/features";
 
   std::vector<DinosaurFeatureList> allFeatures;
-  if (!parallel_3_ && !parallel_4_) {
+  if (!isPartialRun || partial1Dinosaur_ >= 0) {
     size_t fileIdx = 0u;
-    for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
+    for (std::vector<fs::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it, ++fileIdx) {
+      size_t featureFileIdx = (partial1Dinosaur_ <= 0) ? fileIdx : partial1Dinosaur_ - 1;
+      
       std::ifstream fileStream(it->string().c_str(), ios::in);
       DinosaurFeatureList features;
-      DinosaurIO::parseDinosaurFeatureFile(fileStream, fileIdx++, features);
+      DinosaurIO::parseDinosaurFeatureFile(fileStream, featureFileIdx, features);
 
       features.sortByPrecMz();
 
@@ -643,60 +727,62 @@ int Quandenser::run() {
       if (Globals::VERB > 2) {
         std::cerr << "Read in " << features.size() << " features from " << it->filename() << std::endl;
       }
-    }
-
-    if (parallel_2_) {
-      std::cout << "Parallel 2: Saving dinosaur features" << std::endl;
-      for (size_t allFeaturesIdx = 0u; allFeaturesIdx < allFeatures.size(); allFeaturesIdx++) {
-        DinosaurFeatureList ftList = allFeatures.at(allFeaturesIdx);
-        std::string featureListFile = getFeatureFN(featureOutFile, allFeaturesIdx);
+      
+      if (partial1Dinosaur_ >= 0) {
+        if (Globals::VERB > 2) {
+          std::cerr << "Partial run: Saving dinosaur features in binary format for run " << featureFileIdx << std::endl;
+        }
+        // these files will not be overwritten by featureAlignment.matchFeatures
+        std::string featureListFile = getFeatureFN(featureOutFile, featureFileIdx);
         bool append = false;
-        ftList.saveToFile(featureListFile, append);
+        features.saveToFile(featureListFile, append);
       }
-      std::cout << "Parallel 2: Save completed" << std::endl;
+      
+      if (useTempFiles_) {
+        std::string fileName = getFeatureFN(fs::path(tmpFilePrefixAlign) / "features", featureFileIdx);
+        // remove the temp file, as it could have been overwritten by featureAlignment.matchFeatures
+        remove(fileName.c_str()); 
+        bool append = false;
+        features.saveToFile(fileName, append);
+        features.clear();
+      }
     }
-  } else {
-    std::cout << "Parallel 3/4: Loading dinosaur features from Parallel-2" << std::endl;
+  }
+  
+  if (partial1Dinosaur_ >= 0) {
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run for Dinosaur feature detection completed" << std::endl;
+    }
+    return EXIT_SUCCESS;
+  }
+  
+  if (isPartialRun) {
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run: Loading dinosaur features" << std::endl;
+    }
     size_t fileIdx = 0u;
-    for (std::vector<boost::filesystem::path>::const_iterator it = dinosaurFeatureFiles.begin(); it != dinosaurFeatureFiles.end(); ++it) {
+    std::vector<fs::path>::const_iterator it = dinosaurFeatureFiles.begin();
+    for (; it != dinosaurFeatureFiles.end(); ++it, ++fileIdx) {
       DinosaurFeatureList ftList;
       allFeatures.push_back(ftList);
-      boost::filesystem::path ftFilePath(fileList.getFilePath(fileIdx));
+      fs::path ftFilePath(fileList.getFilePath(fileIdx));
       std::string fn(ftFilePath.filename().string());
       // Check if the pair assigned exists in the pair folder
-      if (boost::filesystem::exists("pair/file1/" + fn) ||
-          boost::filesystem::exists("pair/file2/" + fn) ||
-          (parallel_4_ && !useTempFiles_)) {
+      if (partial3MatchRound_ == 0
+          || (partial3MatchRound_ > 0 &&
+               (fs::exists("pair/file1/" + fn)
+                || fs::exists("pair/file2/" + fn))) 
+          || ((partial2MaRaCluster_ || partial4Consensus_) && !useTempFiles_)) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
         bool withIdxMap = true;
         size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
-        std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
+        if (Globals::VERB > 2) {
+          std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
+        }
       }
-      ++fileIdx;
     }
-    std::cout << "Parallel 3/4: Loading completed" << std::endl;
-  }
-
-  std::string tmpFilePrefixAlign = "";
-  if (useTempFiles_) {
-    boost::filesystem::path tmpFileFolder(rootPath);
-    tmpFileFolder /= "tmp";
-    tmpFileFolder /= "matchFeatures";
-    boost::filesystem::create_directories(tmpFileFolder, returnedError);
-    if (!boost::filesystem::exists(tmpFileFolder)) {
-      std::cerr << "Error: could not create output directory at " << tmpFileFolder << std::endl;
-      return EXIT_FAILURE;
-    }
-    tmpFilePrefixAlign = tmpFileFolder.string();
-    
-    if (!parallel_3_ && !parallel_4_) {
-      for (size_t i = 0; i < allFeatures.size(); ++i) {
-        std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(i) + ".dat";
-        remove(fileName.c_str());
-        bool append = false;
-        allFeatures.at(i).saveToFile(fileName, append);
-        allFeatures.at(i).clear();
-      }
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run: Loading dinosaur features completed" << std::endl;
     }
   }
 
@@ -710,174 +796,144 @@ int Quandenser::run() {
   SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
   std::string maraclusterSubFolder = "maracluster";
   std::string clusterFilePath;
-  runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath,
-		 spectrumToPrecursorMap, tmpFilePrefixAlign);
+  rc = runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath,
+	   spectrumToPrecursorMap, tmpFilePrefixAlign);
+  if (rc != EXIT_SUCCESS) return rc;
 
 	/*****************************************************************************
 	  Step 3: Create minimum spanning tree of alignments
 	 ****************************************************************************/
-
-  AlignRetention alignRetention;
-  boost::filesystem::path featureAlignFile(outputFolder_);
-  featureAlignFile /= "maracluster/featureAlignmentQueue.txt";
+  
   std::vector<std::pair<int, FilePair> > featureAlignmentQueue;
-  std::string addedFeaturesFile = "";
-  if (!parallel_3_ && !parallel_4_) {
+  fs::path featureAlignQueueFile(outputFolder_);
+  featureAlignQueueFile /= "maracluster";
+  featureAlignQueueFile /= "featureAlignmentQueue.txt";
+  
+  AlignRetention alignRetention;
+  fs::path featureAlignFile(outputFolder_);
+  featureAlignFile /= "maracluster";
+  featureAlignFile /= "alignRetention.txt";
+  
+  if (!isPartialRun || partial2MaRaCluster_) {
     std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
     MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
 
     alignRetention.getAlignModelsTree();
     alignRetention.createMinDepthTree(featureAlignmentQueue);
 
-    if (parallel_2_) {  // parallel 2 only runs maracluster and outputs the queue to a file
-      std::cout << "Parallel 2: Saving alignment" << std::endl;
-      // Save featureAlignmentQueue vector, used by Nextflow and quandenser
-      std::ofstream outfile(featureAlignFile.string().c_str(), ios::out);
-      std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
-      for (filePairIt = featureAlignmentQueue.begin();
-            filePairIt != featureAlignmentQueue.end(); ++filePairIt) {
-        FilePair filePair = filePairIt->second;
-        int round = filePairIt->first;
-        boost::filesystem::path file1(fileList.getFilePath(filePair.fileIdx1));
-        boost::filesystem::path file2(fileList.getFilePath(filePair.fileIdx2));
-        // Serialized output stream
-        outfile << round << '\t' << file1.string() << '\t' << file2.string()
-                << '\t' << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << std::endl;
+    if (partial2MaRaCluster_) {  // only runs maracluster and outputs the queue to a file
+      if (Globals::VERB > 2) {
+        std::cerr << "Partial run MaRaCluster: Saving alignments and alignment tree" << std::endl;
       }
-      outfile.close();
-
-      // Save alignRetention state
-      alignRetention.SaveState();
-      std::cout << "Parallel 2: Saving completed" << std::endl;
-
-      std::cout << "Parallel stop 2 reached" << std::endl;
-      return EXIT_SUCCESS;
+      
+      rc = saveAlignmentQueue(featureAlignmentQueue, 
+                              featureAlignQueueFile.string(), fileList);
+      if (rc != EXIT_SUCCESS) return rc;
+      
+      rc = alignRetention.saveState(featureAlignFile.string());
+      if (rc != EXIT_SUCCESS) return rc;
     }
-  } else {
-    std::cout << "Parallel 3/4: Loading alignment from Parallel 2" << std::endl;
+  }
+  
+  if (partial2MaRaCluster_) {
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run MaRaCluster finished" << std::endl;
+    }
+    return EXIT_SUCCESS;
+  }
+  
+  std::string addedFeaturesFile = "";
+  if (isPartialRun) {
+    std::cerr << "Partial run: Loading alignments and alignment tree" << std::endl;
 
     // Load state of featureAlignmentQueue
-    std::ifstream infile(featureAlignFile.string().c_str(), ios::in);
+    std::ifstream infile(featureAlignQueueFile.string().c_str(), ios::in);
     int round, prevRound = -1;
-    std::string tmp1, tmp2;
-    int fileidx1, fileidx2;
-    int loop_counter = 0;  // Used for parallelization
+    std::string tmp;
+    int alignFromIdx, alignToIdx;
     std::vector<bool> featuresAdded(fileList.size());
     size_t originalNumFeaturesFromFile = 0;
-    while (infile >> round >> tmp1 >> tmp2 >> fileidx1 >> fileidx2) {
+    while (infile >> round >> tmp >> tmp >> alignFromIdx >> alignToIdx) {
       if (round != prevRound) {
         prevRound = round;
         originalNumFeaturesFromFile = 0;
       }
       
-      FilePair filePair(fileidx1, fileidx2);
+      FilePair filePair(alignFromIdx, alignToIdx);
       
-      boost::filesystem::path file1(fileList.getFilePath(fileidx1));
-      boost::filesystem::path file2(fileList.getFilePath(fileidx2));
+      fs::path file1(fileList.getFilePath(alignFromIdx));
+      fs::path file2(fileList.getFilePath(alignToIdx));
       std::string alignFromFile(file1.filename().string());
       std::string alignToFile(file2.filename().string());
 
       // Parallel_3 injection. Will only run a pair if it exists in pair/ folder and is as assigned round
       // NOTE: In AlignRetention.cpp, line 197: A run is limited by which round it is, needs to be in order
-      if (parallel_4_) {
+      if (partial3MatchRound_ == 0 || partial4Consensus_) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
-      } else if (boost::filesystem::exists("pair/file1/" + alignFromFile) &&
-                 boost::filesystem::exists("pair/file2/" + alignToFile)) {
+      } else if (fs::exists("pair/file1/" + alignFromFile) &&
+                 fs::exists("pair/file2/" + alignToFile)) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
-        addedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
-        if (featuresAdded[fileidx1]) allFeatures.at(fileidx1).sortByPrecMz();
-        if (featuresAdded[fileidx2]) allFeatures.at(fileidx2).sortByPrecMz();
+        addedFeaturesFile = getAddedFeaturesFN(featureOutFile, alignFromIdx, alignToIdx);
+        if (featuresAdded[alignFromIdx]) allFeatures.at(alignFromIdx).sortByPrecMz();
+        if (featuresAdded[alignToIdx]) allFeatures.at(alignToIdx).sortByPrecMz();
         
-        if (!tmpFilePrefixAlign.empty()) {
-          std::string fileName = tmpFilePrefixAlign + "/features."  + boost::lexical_cast<std::string>(fileidx1) + ".dat";
+        if (useTempFiles_) {
+          std::string fileName = getFeatureFN(fs::path(tmpFilePrefixAlign) / "features", alignFromIdx);
           std::cerr << "Writing updated features to " << fileName << std::endl;
           bool append = false;
-          allFeatures.at(fileidx1).saveToFile(fileName, append);
+          allFeatures.at(alignFromIdx).saveToFile(fileName, append);
         }
-      } else if (loop_counter < parallel_3_ - 1 &&  // -1 because parallel_3_ is added +1 from actual depth
-          (boost::filesystem::exists("pair/file1/" + alignToFile) ||
-           boost::filesystem::exists("pair/file2/" + alignToFile))) {
-        std::string savedAddedFeaturesFile = getFeatureFN(featureOutFile, fileidx1, fileidx2);
+      } else if (round < partial3MatchRound_ &&
+          (fs::exists("pair/file1/" + alignToFile) ||
+           fs::exists("pair/file2/" + alignToFile))) {
+        std::string savedAddedFeaturesFile = getAddedFeaturesFN(featureOutFile, alignFromIdx, alignToIdx);
         bool withIdxMap = true;
-        size_t addedFts = allFeatures.at(fileidx2).loadFromFileCheckDuplicates(savedAddedFeaturesFile, withIdxMap);
+        size_t addedFts = allFeatures.at(alignToIdx).loadFromFileCheckDuplicates(savedAddedFeaturesFile, withIdxMap);
         std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile 
-                  << " (total: " << allFeatures.at(fileidx2).size() << " features)" << std::endl;
-        featuresAdded[fileidx2] = true;
+                  << " (total: " << allFeatures.at(alignToIdx).size() << " features)" << std::endl;
+        featuresAdded[alignToIdx] = true;
         
         // update --use-tmp-files match files for matchFrom run 
-        if (boost::filesystem::exists("pair/file1/" + alignToFile) && !tmpFilePrefixAlign.empty()) {
+        if (fs::exists("pair/file1/" + alignToFile) && useTempFiles_) {
           if (originalNumFeaturesFromFile == 0) {
-            originalNumFeaturesFromFile = allFeatures.at(fileidx2).size() - addedFts;
+            originalNumFeaturesFromFile = allFeatures.at(alignToIdx).size() - addedFts;
           }
           
           DinosaurFeatureList addedFeatures;
           addedFeatures.loadFromFileCheckDuplicates(savedAddedFeaturesFile);
-            
-          std::string matchesFileName = tmpFilePrefixAlign + "/matches."  +
-              boost::lexical_cast<std::string>(filePair.fileIdx1) + "." +
-              boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
-          std::string matchesFileNameBackup = matchesFileName + ".bak";
           
-          if (!boost::filesystem::exists(matchesFileNameBackup)) {
-            rename(matchesFileName.c_str(), matchesFileNameBackup.c_str());
-            std::map<int, FeatureIdxMatch> featureMatches;
-            FeatureAlignment::loadFromFile(matchesFileNameBackup, featureMatches);
-            
-            std::map<int, FeatureIdxMatch>::iterator ftIdxMatchIt;
-            for (ftIdxMatchIt = featureMatches.begin(); 
-                 ftIdxMatchIt != featureMatches.end();
-                 ++ftIdxMatchIt) {
-              int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
-              if (targetFeatureIdx >= originalNumFeaturesFromFile) {
-                ftIdxMatchIt->second.targetFeatureIdx = 
-                  allFeatures.at(fileidx2).getFeatureIdx(addedFeatures.at(targetFeatureIdx - originalNumFeaturesFromFile));
-              }
-            }
-            
-            bool append = false;
-            FeatureAlignment::saveToFile(matchesFileName, featureMatches, append);
-          }
+          updateMatchesTmpFile(fs::path(tmpFilePrefixAlign) / "matches", 
+              filePair, allFeatures.at(alignToIdx), addedFeatures,
+              originalNumFeaturesFromFile);
         }
       }
-      loop_counter++;
     }
     infile.close();
     
     // Load state of alignRetention
-    alignRetention.LoadState();
-    std::cout << "Parallel 3/4: Loading completed" << std::endl;
+    alignRetention.loadState(featureAlignFile.string());
+    std::cerr << "Partial run: Loading alignments and alignment tree completed" << std::endl;
   }
 
 	/*****************************************************************************
     Step 4: Match features between runs
    ****************************************************************************/
 
-  boost::filesystem::path percolatorFolder(rootPath);
-
+  fs::path percolatorFolder(rootPath);
   percolatorFolder /= "percolator";
-  boost::filesystem::create_directories(percolatorFolder, returnedError);
-  if (!boost::filesystem::exists(percolatorFolder)) {
-    std::cerr << "Error: could not create output directory at "
-              << percolatorFolder.string() << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  std::string percolatorOutputFileBaseFN = percolatorFolder.string();
-
-  if (maxMissingValues_ < 0) {
-    maxMissingValues_ = fileList.size() / 4;
-  }
+  rc = createDirectory(percolatorFolder);
+  if (rc != EXIT_SUCCESS) return rc;
 
 	FeatureAlignment featureAlignment(percolatorFolder.string(), percolatorArgs_,
 		      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_,
 		      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
   
-  if (!(parallel_4_ && useTempFiles_)) {
+  if (!(partial4Consensus_ && useTempFiles_)) {
     featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
   }
 
-  if (parallel_3_) {  // parallel 3 runs dinosaur.
-    std::cout << "Parallel stop 3 reached" << std::endl;
+  if (partial3MatchRound_ >= 0) {  // parallel 3 runs dinosaur.
+    std::cerr << "Partial run for matching features completed" << std::endl;
     return EXIT_SUCCESS;
   }
   
@@ -891,22 +947,15 @@ int Quandenser::run() {
     Step 5: Apply single linkage clustering to form MS1 feature groups
    ****************************************************************************/
 
-  if (maxMissingValues_ < 0) {
-    maxMissingValues_ = fileList.size() / 4;
-  }
-
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);
   std::string tmpFilePrefixGroup = "";
   if (useTempFiles_) {
-  	boost::filesystem::path tmpFileFolder(rootPath);
+  	fs::path tmpFileFolder(rootPath);
 	  tmpFileFolder /= "tmp";
-  	tmpFileFolder /= "featureToGroupMaps";
-	  boost::filesystem::create_directories(tmpFileFolder, returnedError);
-  	if (!boost::filesystem::exists(tmpFileFolder)) {
-	  	std::cerr << "Error: could not create output directory at "
-		  					<< tmpFileFolder << std::endl;
-  		return EXIT_FAILURE;
-	  }
+	  tmpFileFolder /= "featureToGroupMaps";
+	  rc = createDirectory(tmpFileFolder);
+    if (rc != EXIT_SUCCESS) return rc;
+    
 	  tmpFilePrefixGroup = tmpFileFolder.string() + "/featureToGroupMap.";
   }
 
@@ -921,9 +970,10 @@ int Quandenser::run() {
 	std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
 	std::string clusterFilePathExtraFeatures;
 	SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
-	runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures,
+	rc = runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures,
 			   clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures,
 			   tmpFilePrefixAlign);
+  if (rc != EXIT_SUCCESS) return rc;
 
 	/*****************************************************************************
 			Step 7: Keep top 3 consensus spectra per feature group based on
@@ -959,7 +1009,7 @@ int Quandenser::run() {
   SpectrumToPrecursorMap noMap(fileList.size());
   MaRaClusterAdapter maraclusterAdapter(noFeatures, noMap, outputSpectrumFile_);
 
-  boost::filesystem::path featureGroupsOutFile(rootPath);
+  fs::path featureGroupsOutFile(rootPath);
   featureGroupsOutFile /= fnPrefix_ + ".feature_groups.tsv";
   featureGroups.printFeatureGroups(featureGroupsOutFile.string(),
       allFeatures, featureToSpectrumCluster,
@@ -976,7 +1026,7 @@ int Quandenser::run() {
 
   std::string maraclusterSubFolderConsensus = "consensus_spectra";
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
-  boost::filesystem::path maraclusterFolder(rootPath);
+  fs::path maraclusterFolder(rootPath);
   maraclusterFolder /= maraclusterSubFolderConsensus;
   maraclusterArgs[1] = "consensus";
   maraclusterArgs.push_back("--output-folder");

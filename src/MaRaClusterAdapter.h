@@ -52,7 +52,7 @@ class MaRaClusterAdapter : public maracluster::MaRaCluster {
         (char**)&maraclusterArgv.front());
   }
   
-  int mergeSpectra(); // overrides base function
+  int mergeSpectra(); // overrides base function to use custom ConsensusMerger class
   
   inline std::map<int, std::vector<DinosaurFeature> >& getSpectrumClusterToConsensusFeatures() { 
     return spectrumClusterToConsensusFeatures_; 
@@ -68,7 +68,7 @@ class MaRaClusterAdapter : public maracluster::MaRaCluster {
   }
   
  protected:
-  int createIndex(); // overrides base function
+  int createIndex(); // overrides base function to use custom SpectrumFiles class
   
   const std::vector<DinosaurFeatureList>& featureLists_;
   SpectrumToPrecursorMap& spectrumToPrecursorMap_;

@@ -22,6 +22,7 @@
 #include <set>
 
 #include <boost/filesystem.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "maracluster/src/SpectrumFileList.h"
 
@@ -94,6 +95,18 @@ class FeatureAlignment {
     std::vector<std::pair<int, FeatureIdxMatch> > featureMatchPairs(
         ftMatchMap.begin(), ftMatchMap.end());
     maracluster::BinaryInterface::write(featureMatchPairs, ftMatchFile, append);
+  }
+  
+  static std::string getFeatureFN(const std::string& baseFN, size_t fileIdx) {
+    return baseFN + "." +
+    boost::lexical_cast<std::string>(fileIdx) + ".dat";
+  }
+
+  static std::string getAddedFeaturesFN(const std::string& baseFN,
+      size_t fileIdx1, size_t fileIdx2) {
+    return baseFN + "." +
+      boost::lexical_cast<std::string>(fileIdx1) + "_" +
+      boost::lexical_cast<std::string>(fileIdx2) + ".dat";
   }
 
  protected:

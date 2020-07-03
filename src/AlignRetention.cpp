@@ -298,8 +298,8 @@ int AlignRetention::getMinimumDepthRoot(int lastNode) {
   return lastNode;
 }
 
-void AlignRetention::SaveState(){
-  std::ofstream outfile("Quandenser_output/maracluster/alignRetention.txt");
+int AlignRetention::saveState(const std::string& alignFilePath){
+  std::ofstream outfile(alignFilePath.c_str());
   /* To save:
   RTimePairs rTimePairs_;
   std::map<FilePair, SplineRegression> alignments_;
@@ -308,48 +308,44 @@ void AlignRetention::SaveState(){
   */
 
   // alignment_
-  std::map<FilePair, SplineRegression>::iterator alignmentIt;
-  for (alignmentIt = alignments_.begin(); alignmentIt != alignments_.end(); alignmentIt++) {
+  if (outfile.is_open()) {
+    std::map<FilePair, SplineRegression>::iterator alignmentIt;
+    for (alignmentIt = alignments_.begin(); alignmentIt != alignments_.end(); alignmentIt++) {
 
-    // Save filepair + rmse
-    FilePair filePair = alignmentIt->first;
-    SplineRegression spline = alignmentIt->second;
-    outfile << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << '\t' << spline.getRmse() << '\t';
+      // Save filepair + rmse
+      FilePair filePair = alignmentIt->first;
+      SplineRegression spline = alignmentIt->second;
+      outfile << filePair.fileIdx1 << '\t' << filePair.fileIdx2 << '\t' << spline.getRmse() << '\t';
 
-    // Save data
-    std::pair<std::vector<double>, std::vector<double> > vector_pair = spline.getData();
-    std::vector<double> x = vector_pair.first;
-    std::vector<double> y = vector_pair.second;
-
-    // Save x
-    outfile << x.size() << '\t';
-    for(int i = 0; i < x.size(); i++) {
-      outfile << x[i] << '\t';
-    }
-    // Save y
-    outfile << y.size() << '\t';
-    for(int i = 0; i < y.size(); i++) {
-      outfile << y[i] << '\t';
-    }
-    /*
-    RTimePairs::iterator filePairIt;
-    for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
-      outfile << filePairIt->second.size() << '\t';
-      for (std::vector<RTimePair>::iterator rt_pair_it = filePairIt->second.begin(); rt_pair_it != filePairIt->second.end(); ++rt_pair_it){
-        outfile << rt_pair_it->rTime1 << "\t" << rt_pair_it->rTime2 << '\t';
+      // Save data
+      std::pair<std::vector<double>, std::vector<double> > vector_pair = spline.getData();
+      std::vector<double> x = vector_pair.first;
+      std::vector<double> y = vector_pair.second;
+      
+      outfile << x.size() << '\t';
+      for (int i = 0; i < x.size(); i++) {
+        outfile << x[i] << '\t';
       }
-      outfile << std::endl;
-    } */
+      outfile << y.size() << '\t';
+      for (int i = 0; i < y.size(); i++) {
+        outfile << y[i] << '\t';
+      }
 
-    outfile << std::endl;
+      outfile << std::endl;
+    }
+    outfile.close();
+    return EXIT_SUCCESS;
+  } else {
+    std::cerr << "ERROR: Could not open " << alignFilePath
+        << " for writing the retention time alignments." << std::endl;
+    return EXIT_FAILURE;
   }
-  outfile.close();
 }
 
-void AlignRetention::LoadState(){
+void AlignRetention::loadState(const std::string& alignFilePath){
   // Load state of featureAlignmentQueue
   std::cout << "Loading state of alignment" << std::endl;
-  std::ifstream infile("Quandenser_output/maracluster/alignRetention.txt");
+  std::ifstream infile(alignFilePath.c_str());
   SplineRegression spline;
   int fileidx1;
   int fileidx2;

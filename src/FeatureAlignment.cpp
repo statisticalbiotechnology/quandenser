@@ -75,11 +75,11 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     const std::string& addedFeaturesFile,
     const std::string& tmpFilePrefix) {
   if (!tmpFilePrefix.empty() && addedFeaturesFile.empty()) {
-    std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx1) + ".dat";
+    std::string fileName = getFeatureFN(tmpFilePrefix + "/features", filePair.fileIdx1);
     featuresQueryRun.loadFromFile(fileName);
 
     bool withIdxMap = true;
-    fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    fileName = getFeatureFN(tmpFilePrefix + "/features", filePair.fileIdx2);
     featuresTargetRun.loadFromFile(fileName, withIdxMap);
   }
 
@@ -122,16 +122,15 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
   featuresTargetRun.sortByPrecMz();
 
   if (!tmpFilePrefix.empty()) {
-    std::string fileName = tmpFilePrefix + "/features."  + boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    std::string fileName = getFeatureFN(tmpFilePrefix + "/features", filePair.fileIdx2);
     bool append = false;
     featuresTargetRun.saveToFile(fileName, append);
 
     featuresQueryRun.clear();
     featuresTargetRun.clear();
 
-    std::string matchesFileName = tmpFilePrefix + "/matches."  +
-        boost::lexical_cast<std::string>(filePair.fileIdx1) + "." +
-        boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+    std::string matchesFileName = getAddedFeaturesFN(
+        tmpFilePrefix + "/matches", filePair.fileIdx1, filePair.fileIdx2);
     saveToFile(matchesFileName, featureMatches_[filePair], append);
     featureMatches_[filePair].clear();
   }

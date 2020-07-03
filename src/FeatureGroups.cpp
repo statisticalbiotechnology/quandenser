@@ -62,9 +62,8 @@ void FeatureGroups::singleLinkClustering(
     }
     
     if (!tmpFilePrefixAlign.empty()) {
-      std::string matchesFileName = tmpFilePrefixAlign + "/matches."  + 
-        boost::lexical_cast<std::string>(filePair.fileIdx1) + "." + 
-        boost::lexical_cast<std::string>(filePair.fileIdx2) + ".dat";
+      std::string matchesFileName = FeatureAlignment::getAddedFeaturesFN(
+        tmpFilePrefixAlign + "/matches", filePair.fileIdx1, filePair.fileIdx2);
       FeatureAlignment::loadFromFile(matchesFileName, featureMatches[filePair]);
     }
     
