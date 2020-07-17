@@ -1,3 +1,7 @@
+v0.03.1
+* Fixed Dinosaur issue with recent ProteoWizard mzML files (#20)
+* Fixed MaRaCluster issue with nativeIds in recent ProteoWizard mzML files
+
 v0.03
 * Fixed ill-defined initialization of linkPEP threshold for match-between-runs
 * Fixed problem with specifying consensus spectrum file (#4)

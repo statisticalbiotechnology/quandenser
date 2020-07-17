@@ -38,7 +38,7 @@ elif [[ -f ${HOME}/bin/brew ]] || [[ -f /usr/local/bin/brew ]]
     else
       package_manager=brew
     fi
-    other_packages="cmake gnu-tar wget maven"
+    other_packages="cmake gnu-tar wget libomp maven"
     ${package_manager} update || true # brew.rb raises an error on the vagrant box, just ignore it
     ${package_manager} tap AdoptOpenJDK/openjdk
     ${package_manager} cask install adoptopenjdk8
