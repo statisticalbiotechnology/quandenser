@@ -26,6 +26,10 @@ void SpectrumToPrecursorMap::serialize(std::string& outputFile) {
        fileIt != spectrumToPrecursorMap_.end(); ++fileIt, ++fileIdx) {
     std::vector<SpectrumFeaturePair> outputVector;
     std::map<int, DinosaurFeatureList>::const_iterator spectrumIt;
+    if (Globals::VERB > 1) {
+      std::cerr << "Serializing " << fileIt->size() 
+        << " spectrum to precursor pairs for file idx " << fileIdx << std::endl;
+    }
     for (spectrumIt = fileIt->begin(); spectrumIt != fileIt->end(); ++spectrumIt) {
       DinosaurFeatureList::const_iterator ftIt;
       for (ftIt = spectrumIt->second.begin(); ftIt != spectrumIt->second.end(); ++ftIt) {

@@ -32,8 +32,8 @@ Quandenser::Quandenser() : call_(""), fnPrefix_("Quandenser"), seed_(1u),
     decoyOffset_(5.0 * 1.000508),
     linkPEPThreshold_(0.25), linkPEPMbrSearchThreshold_(0.05),
     maxFeatureCandidates_(2),  useTempFiles_(false),
-    partial1Dinosaur_(-1), partial2MaRaCluster_(false), 
-    partial3MatchRound_(-1), partial4Consensus_(false) {}
+    partial1Dinosaur_(-1), partial2MaRaCluster_(""), 
+    partial3MatchRound_(-1), partial4Consensus_("") {}
 
 std::string Quandenser::greeter() {
   std::ostringstream oss;
@@ -172,8 +172,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   cmd.defineOption("X",
       "partial-2-maracluster",
       "Partial run step 2. Runs the first MaRaCluster run and the retention time alignments.",
-      "",
-      TRUE_IF_SET);
+      "mode");
   cmd.defineOption("Y",
       "partial-3-match-round",
       "Partial run step 3. Runs a feature matching round from the minimum spanning tree of run alignments. Specify either the round number as specified in the feature alignment queue (starting at round 1), or specify 0 to process all rounds in one go.",
@@ -181,8 +180,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   cmd.defineOption("Z",
       "partial-4-consensus",
       "Partial run step 4. Runs second MaRaCluster run, creates and write feature groups and consensus spectra.",
-      "",
-      TRUE_IF_SET);
+      "mode");
   cmd.defineOption(Option::EXPERIMENTAL_FEATURE,
       "decoy-offset",
       "Decoy m/z offset (lowest: -1000.0, highest: 1000.0, default: 5.0 * 1.000508).",
@@ -321,7 +319,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   }
 
   if (cmd.optionSet("partial-2-maracluster")) {
-    partial2MaRaCluster_ = true;
+    partial2MaRaCluster_ = cmd.options["partial-2-maracluster"];
   }
 
   if (cmd.optionSet("partial-3-match-round")) {
@@ -329,7 +327,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   }
 
   if (cmd.optionSet("partial-4-consensus")) {
-    partial4Consensus_ = true;
+    partial4Consensus_ = cmd.options["partial-4-consensus"];
   }
 
   if (cmd.optionSet("decoy-offset")) {
@@ -361,13 +359,40 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
     std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap,
-    const std::string& tmpFilePrefixAlign) {
+    const std::string& tmpFilePrefixAlign,
+    const std::string& mode) {
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
   fs::path maraclusterFolder(outputFolder_);
   maraclusterFolder /= maRaClusterSubFolder;
-  maraclusterArgs[1] = "batch";
+  if (mode == "index") {
+    maraclusterArgs[1] = "index";
+  } else if (mode.rfind("pvalue", 0) == 0) {
+    maraclusterArgs[1] = "pvalue";
+    std::string datFile = mode.substr(7);
+    maraclusterArgs.push_back("--specIn");
+    maraclusterArgs.push_back(maraclusterFolder.string() + "/" + datFile);
+    maraclusterArgs.push_back("--peakCountsFN");
+    maraclusterArgs.push_back(maraclusterFolder.string() + "/MaRaCluster.peak_counts.dat");
+    maraclusterArgs.push_back("--prefix");
+    maraclusterArgs.push_back(datFile);
+    maraclusterArgs.push_back("--clusteringTree");
+    maraclusterArgs.push_back(maraclusterFolder.string() + "/" + datFile + ".pvalue_tree.tsv");
+    maraclusterArgs.push_back("--pvalOut");
+    maraclusterArgs.push_back(maraclusterFolder.string() + "/" + datFile + ".pvalues.dat");    
+  } else if (mode.rfind("overlap", 0) == 0) {
+    maraclusterArgs[1] = "overlap";
+    std::string overlapIdx = mode.substr(8);
+    maraclusterArgs.push_back("--datFNfile");
+    maraclusterArgs.push_back(maraclusterFolder.string() + "/MaRaCluster.dat_file_list.txt");
+    maraclusterArgs.push_back("--overlapBatchIdx");
+    maraclusterArgs.push_back(overlapIdx);
+  } else {
+    maraclusterArgs[1] = "batch";
+  }
   maraclusterArgs.push_back("--output-folder");
   maraclusterArgs.push_back(maraclusterFolder.string());
+  maraclusterArgs.push_back("--scanInfoFN");
+  maraclusterArgs.push_back(maraclusterFolder.string() + "/MaRaCluster.scan_info.dat");
 
   std::string spectrumOutputFile = ""; /* Not needed here */
   MaRaClusterAdapter maraclusterAdapter(allFeatures, spectrumToPrecursorMap, spectrumOutputFile);
@@ -377,8 +402,8 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   spectrumToPrecursorFilePath /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
   std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
 
-  if (!fs::exists(spectrumToPrecursorFile)) {
-    if (useTempFiles_) {
+  if (!fs::exists(spectrumToPrecursorFile) || !mode.empty()) {
+    if (useTempFiles_ && (mode.empty() || mode == "index" || mode == "batch")) {
       loadAllFeatures(tmpFilePrefixAlign, allFeatures);
     }
 
@@ -388,17 +413,20 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
       return rc;
     }
 
-    if (useTempFiles_) {
+    if (useTempFiles_ && (mode.empty() || mode == "index" || mode == "batch")) {
       unloadAllFeatures(allFeatures);
     }
-
-    spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
-    if (Globals::VERB > 1) {
-      std::cerr << "Serialized spectrum to precursor map" << std::endl;
-    }
-
-    if (useTempFiles_) {
-      unloadAllFeatures(allFeatures);
+    
+    if (mode.empty() || mode == "index" || mode == "batch") {
+      spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
+      if (Globals::VERB > 1) {
+        std::cerr << "Serialized spectrum to precursor map" << std::endl;
+      }
+    } else if (mode == "cluster") {
+      spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
+      if (Globals::VERB > 1) {
+        std::cerr << "Deserialized spectrum to precursor map" << std::endl;
+      }
     }
   } else {
     spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
@@ -636,8 +664,8 @@ int Quandenser::run() {
   int rc = createDirectory(rootPath);
   if (rc != EXIT_SUCCESS) return rc;
     
-  bool isPartialRun = (partial1Dinosaur_ >= 0 || partial2MaRaCluster_ 
-                       || partial3MatchRound_ >= 0 || partial4Consensus_);
+  bool isPartialRun = (partial1Dinosaur_ >= 0 || !partial2MaRaCluster_.empty()
+                  || partial3MatchRound_ >= 0 || !partial4Consensus_.empty());
 
   /*****************************************************************************
     Step 0: Read in the input text file with a list of mzML files
@@ -772,7 +800,7 @@ int Quandenser::run() {
           || (partial3MatchRound_ > 0 &&
                (fs::exists("pair/file1/" + fn)
                 || fs::exists("pair/file2/" + fn))) 
-          || ((partial2MaRaCluster_ || partial4Consensus_) && !useTempFiles_)) {
+          || ((!partial2MaRaCluster_.empty() || !partial4Consensus_.empty()) && !useTempFiles_)) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
         bool withIdxMap = true;
         size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
@@ -797,9 +825,16 @@ int Quandenser::run() {
   std::string maraclusterSubFolder = "maracluster";
   std::string clusterFilePath;
   rc = runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath,
-	   spectrumToPrecursorMap, tmpFilePrefixAlign);
+	   spectrumToPrecursorMap, tmpFilePrefixAlign, partial2MaRaCluster_);
   if (rc != EXIT_SUCCESS) return rc;
-
+  
+  if (!partial2MaRaCluster_.empty() && partial2MaRaCluster_ != "batch" && partial2MaRaCluster_ != "cluster") {
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run MaRaCluster finished" << std::endl;
+    }
+    return EXIT_SUCCESS;
+  }
+  
 	/*****************************************************************************
 	  Step 3: Create minimum spanning tree of alignments
 	 ****************************************************************************/
@@ -814,14 +849,14 @@ int Quandenser::run() {
   featureAlignFile /= "maracluster";
   featureAlignFile /= "alignRetention.txt";
   
-  if (!isPartialRun || partial2MaRaCluster_) {
+  if (!isPartialRun || !partial2MaRaCluster_.empty()) {
     std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
     MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
 
     alignRetention.getAlignModelsTree();
     alignRetention.createMinDepthTree(featureAlignmentQueue);
 
-    if (partial2MaRaCluster_) {  // only runs maracluster and outputs the queue to a file
+    if (!partial2MaRaCluster_.empty()) {  // only runs maracluster and outputs the queue to a file
       if (Globals::VERB > 2) {
         std::cerr << "Partial run MaRaCluster: Saving alignments and alignment tree" << std::endl;
       }
@@ -835,12 +870,16 @@ int Quandenser::run() {
     }
   }
   
-  if (partial2MaRaCluster_) {
+  if (!partial2MaRaCluster_.empty()) {
     if (Globals::VERB > 2) {
       std::cerr << "Partial run MaRaCluster finished" << std::endl;
     }
     return EXIT_SUCCESS;
   }
+  
+  fs::path matchedFeaturesFile(outputFolder_);
+  matchedFeaturesFile /= "percolator";
+  matchedFeaturesFile /= "matches";
   
   std::string addedFeaturesFile = "";
   if (isPartialRun) {
@@ -868,12 +907,12 @@ int Quandenser::run() {
 
       // Parallel_3 injection. Will only run a pair if it exists in pair/ folder and is as assigned round
       // NOTE: In AlignRetention.cpp, line 197: A run is limited by which round it is, needs to be in order
-      if (partial3MatchRound_ == 0 || partial4Consensus_) {
+      if (partial3MatchRound_ == 0 || !partial4Consensus_.empty()) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
       } else if (fs::exists("pair/file1/" + alignFromFile) &&
                  fs::exists("pair/file2/" + alignToFile)) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
-        addedFeaturesFile = getAddedFeaturesFN(featureOutFile, alignFromIdx, alignToIdx);
+        addedFeaturesFile = getAddedFeaturesFN(matchedFeaturesFile, alignFromIdx, alignToIdx);
         if (featuresAdded[alignFromIdx]) allFeatures.at(alignFromIdx).sortByPrecMz();
         if (featuresAdded[alignToIdx]) allFeatures.at(alignToIdx).sortByPrecMz();
         
@@ -886,7 +925,7 @@ int Quandenser::run() {
       } else if (round < partial3MatchRound_ &&
           (fs::exists("pair/file1/" + alignToFile) ||
            fs::exists("pair/file2/" + alignToFile))) {
-        std::string savedAddedFeaturesFile = getAddedFeaturesFN(featureOutFile, alignFromIdx, alignToIdx);
+        std::string savedAddedFeaturesFile = getAddedFeaturesFN(matchedFeaturesFile, alignFromIdx, alignToIdx);
         bool withIdxMap = true;
         size_t addedFts = allFeatures.at(alignToIdx).loadFromFileCheckDuplicates(savedAddedFeaturesFile, withIdxMap);
         std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile 
@@ -928,7 +967,7 @@ int Quandenser::run() {
 		      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_,
 		      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
   
-  if (!(partial4Consensus_ && useTempFiles_)) {
+  if (!(!partial4Consensus_.empty() && useTempFiles_)) {
     featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
   }
 
@@ -943,8 +982,28 @@ int Quandenser::run() {
     ftListIt->clearFeatureToIdxMap();
   }
 
+	/*****************************************************************************
+	  Step 5: Run MaRaCluster again, now with newly discovered features from
+			      targeted Dinosaur runs
+	 ****************************************************************************/
+
+	std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
+	std::string clusterFilePathExtraFeatures;
+	SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
+	rc = runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures,
+			   clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures,
+			   tmpFilePrefixAlign, partial4Consensus_);
+  if (rc != EXIT_SUCCESS) return rc;
+  
+  if (!partial4Consensus_.empty() && partial4Consensus_ != "batch" && partial4Consensus_ != "cluster") {
+    if (Globals::VERB > 2) {
+      std::cerr << "Partial run MaRaCluster finished" << std::endl;
+    }
+    return EXIT_SUCCESS;
+  }
+  
   /*****************************************************************************
-    Step 5: Apply single linkage clustering to form MS1 feature groups
+    Step 6: Apply single linkage clustering to form MS1 feature groups
    ****************************************************************************/
 
   FeatureGroups featureGroups(maxMissingValues_, intensityScoreThreshold_);
@@ -961,20 +1020,7 @@ int Quandenser::run() {
 
 	featureGroups.singleLinkClustering(featureAlignmentQueue,
       featureAlignment.getFeatureMatches(), tmpFilePrefixGroup, tmpFilePrefixAlign);
-
-	/*****************************************************************************
-	  Step 6: Run MaRaCluster again, now with newly discovered features from
-			      targeted Dinosaur runs
-	 ****************************************************************************/
-
-	std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
-	std::string clusterFilePathExtraFeatures;
-	SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
-	rc = runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures,
-			   clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures,
-			   tmpFilePrefixAlign);
-  if (rc != EXIT_SUCCESS) return rc;
-
+  
 	/*****************************************************************************
 			Step 7: Keep top 3 consensus spectra per feature group based on
 			        intensity score

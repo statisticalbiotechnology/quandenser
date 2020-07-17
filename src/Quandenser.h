@@ -77,9 +77,9 @@ class Quandenser {
   int maxFeatureCandidates_;
 
   int partial1Dinosaur_;
-  bool partial2MaRaCluster_;
+  std::string partial2MaRaCluster_;
   int partial3MatchRound_;
-  bool partial4Consensus_;
+  std::string partial4Consensus_;
 	bool useTempFiles_;
 
   int runMaRaCluster(const std::string& maRaClusterSubFolder,
@@ -87,7 +87,8 @@ class Quandenser {
     std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
     SpectrumToPrecursorMap& spectrumToPrecursorMap,
-    const std::string& tmpFilePrefixAlign);
+    const std::string& tmpFilePrefixAlign,
+    const std::string& mode);
 
   void loadAllFeatures(const std::string& tmpFilePrefixAlign,
     std::vector<DinosaurFeatureList>& allFeatures);
