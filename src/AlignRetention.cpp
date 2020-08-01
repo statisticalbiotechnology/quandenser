@@ -122,7 +122,19 @@ void AlignRetention::getAlignModelsTree() {
 
 void AlignRetention::getAlignModels() {
   RTimePairs::iterator filePairIt;
+  
+  /* "touch" all keys to allow OMP to concurrently fill it later */
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
+    alignments_[filePairIt->first];
+    FilePair revFilePair = filePairIt->first.getRevFilePair();
+    alignments_[revFilePair];
+  }
+
+#pragma omp parallel for  
+  for (int i = 0; i < rTimePairs_.size(); ++i) {
+    filePairIt = rTimePairs_.begin();
+    std::advance(filePairIt, i);
+    
     std::vector<double> medianRTimesRun1, medianRTimesRun2;
 
     if (filePairIt->second.size() < 250) {
