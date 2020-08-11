@@ -54,7 +54,6 @@ class SplineRegression : public BaseSpline {
     virtual void limitg();
     virtual void limitgamma();
     std::vector<double> y;
-    static const double gRange;
 
     float rmse_;
 };

@@ -120,19 +120,18 @@ void AlignRetention::getAlignModelsTree() {
   }
 }
 
-void AlignRetention::getAlignModels() {
-  RTimePairs::iterator filePairIt;
-  
+void AlignRetention::getAlignModels() {  
   /* "touch" all keys to allow OMP to concurrently fill it later */
-  for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
-    alignments_[filePairIt->first];
-    FilePair revFilePair = filePairIt->first.getRevFilePair();
+  RTimePairs::iterator filePairItReserve;
+  for (filePairItReserve = rTimePairs_.begin(); filePairItReserve != rTimePairs_.end(); ++filePairItReserve) {
+    alignments_[filePairItReserve->first];
+    FilePair revFilePair = filePairItReserve->first.getRevFilePair();
     alignments_[revFilePair];
   }
 
-#pragma omp parallel for  
+#pragma omp parallel for schedule(dynamic, 100)
   for (int i = 0; i < rTimePairs_.size(); ++i) {
-    filePairIt = rTimePairs_.begin();
+    RTimePairs::iterator filePairIt = rTimePairs_.begin();
     std::advance(filePairIt, i);
     
     std::vector<double> medianRTimesRun1, medianRTimesRun2;
@@ -146,7 +145,7 @@ void AlignRetention::getAlignModels() {
     }
 
     getKnots(filePairIt->second, medianRTimesRun1, medianRTimesRun2);
-
+    
     if (medianRTimesRun1.size() < 50) {
       if (Globals::VERB > 2) {
         std::cerr << "Skipping aligning runs: " << filePairIt->first.fileIdx1 << " " << filePairIt->first.fileIdx2
@@ -174,6 +173,8 @@ void AlignRetention::getAlignModels() {
           << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1
           << " rmse2 = " << rmse2 << " numPairs = " << filePairIt->second.size() << std::endl;
     }
+    
+    filePairIt->second.clear();
   }
 }
 
@@ -191,7 +192,7 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   }
   std::sort(rTimesRun1.begin(), rTimesRun1.end());
   std::sort(rTimesRun2.begin(), rTimesRun2.end());
-
+  
   int numBins = 100;
   float binSize = static_cast<float>(rTimePairsSingleFilePair.size()) / numBins;
   for (int bin = 0; bin < numBins; ++bin) {
