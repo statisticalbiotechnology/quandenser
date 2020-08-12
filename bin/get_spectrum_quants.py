@@ -1,15 +1,12 @@
 '''
-Create Triqler input files by combining Percolator output with the feature 
-groups from Quandenser. Requires Triqler and NumPy to be installed.
+Obtain a tab separated file with intensities per run for each consensus 
+spectrum, together with the feature-match probabilities from a Quandenser
+feature groups output file. Requires Triqler and NumPy to be installed.
 
-If Percolator output is unavailable, one can mimick this format by providing
-a tab-delimited file with the following columns (including a header row):
+Example:
 
-PSMId <tab> score <tab> q-value <tab> posterior_error_prob <tab> peptide <tab> proteinIds
+python get_spectrum_quants.py Quandenser_output/Quandenser.feature_groups.tsv --file_list_file file_list.txt
 
-The q-value and posterior_error_prob can be set to 0, as they are not used 
-here. Furthermore, the file should be sorted by the score column, where higher 
-scores indicate more confident hits and the highest score is on top of the list.
 '''
 
 from __future__ import print_function
@@ -60,6 +57,8 @@ def main():
     if row.spectrum >= 0 or args.retain_without_spectrum:
       row = [row.spectrum, row.featureGroup] + list(map(lambda x : '%.0f' % x, row.quant)) + list(map(lambda x : '%.5f' % x, row.linkPEP))
       writer.writerow(row)
+  
+  os.remove(triqlerInputFile)
 
 def parseArgs():
   import argparse
