@@ -55,8 +55,8 @@ class SpectrumToPrecursorMap {
     return spectrumToPrecursorMap_[scanId.fileIdx][scanId.scannr].end();
   }
   
-  void serialize(std::string& outputFile);
-  void deserialize(std::string& inputFile);
+  void serialize(const std::string& outputFile);
+  void deserialize(const std::string& inputFile);
   
  protected:
   std::vector<std::map<int, DinosaurFeatureList> > spectrumToPrecursorMap_;

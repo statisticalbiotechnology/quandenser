@@ -18,7 +18,7 @@
 
 namespace quandenser {
 
-void SpectrumToPrecursorMap::serialize(std::string& outputFile) { 
+void SpectrumToPrecursorMap::serialize(const std::string& outputFile) { 
   bool append = false;
   std::vector<std::map<int, DinosaurFeatureList> >::const_iterator fileIt;
   int fileIdx;
@@ -45,7 +45,7 @@ void SpectrumToPrecursorMap::serialize(std::string& outputFile) {
   }
 }
 
-void SpectrumToPrecursorMap::deserialize(std::string& inputFile) {
+void SpectrumToPrecursorMap::deserialize(const std::string& inputFile) {
   std::vector<SpectrumFeaturePair> inputVector;
   maracluster::BinaryInterface::read(inputFile, inputVector);
   

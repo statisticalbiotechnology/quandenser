@@ -355,16 +355,17 @@ int AlignRetention::saveState(const std::string& alignFilePath){
   }
 }
 
-void AlignRetention::loadState(const std::string& alignFilePath){
+void AlignRetention::loadState(const std::string& alignFilePath, const FilePair& alignedFilePair) {
   // Load state of featureAlignmentQueue
   std::cout << "Loading state of alignment" << std::endl;
   std::ifstream infile(alignFilePath.c_str());
   SplineRegression spline;
   int fileidx1;
   int fileidx2;
+  FilePair dummyFilePair(-1, -1);
   while (infile >> fileidx1 >> fileidx2) {
     FilePair filePair(fileidx1, fileidx2);
-
+    
     // Read rmse
     float rmse;
     infile >> rmse;
@@ -390,6 +391,9 @@ void AlignRetention::loadState(const std::string& alignFilePath){
       double d = atof(d_string.c_str());
       y.push_back(d);
     }
+    
+    if (!(alignedFilePair == dummyFilePair || filePair == alignedFilePair)) continue;
+    
     spline.setData(x,y);
     spline.roughnessPenaltyIRLS();
     spline.predict(x,y);

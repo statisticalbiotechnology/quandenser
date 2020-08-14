@@ -358,7 +358,7 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
     const maracluster::SpectrumFileList& fileList,
     std::vector<DinosaurFeatureList>& allFeatures,
     std::string& clusterFilePath,
-    SpectrumToPrecursorMap& spectrumToPrecursorMap,
+    const std::string& spectrumToPrecursorFile,
     const std::string& tmpFilePrefixAlign,
     const std::string& mode) {
   std::vector<std::string> maraclusterArgs = maraclusterArgs_;
@@ -395,47 +395,41 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
   maraclusterArgs.push_back(maraclusterFolder.string() + "/MaRaCluster.scan_info.dat");
 
   std::string spectrumOutputFile = ""; /* Not needed here */
+  SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
   MaRaClusterAdapter maraclusterAdapter(allFeatures, spectrumToPrecursorMap, spectrumOutputFile);
   maraclusterAdapter.parseOptions(maraclusterArgs);
-
-  fs::path spectrumToPrecursorFilePath(maraclusterFolder);
-  spectrumToPrecursorFilePath /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
-  std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
-
+  
+  clusterFilePath = maraclusterAdapter.getClusterFileName();
+  
+  bool createIndex = (mode.empty() || mode == "index" || mode == "batch");
   if (!fs::exists(spectrumToPrecursorFile) || !mode.empty()) {
-    if (useTempFiles_ && (mode.empty() || mode == "index" || mode == "batch")) {
+    if (useTempFiles_ && createIndex) {
       loadAllFeatures(tmpFilePrefixAlign, allFeatures);
     }
-
-    int rc = maraclusterAdapter.run();
-    if (rc != EXIT_SUCCESS) {
-      std::cerr << "MaRaCluster failed with exit code " << rc << ". Terminating.." << std::endl;
-      return rc;
+    
+    if (!(mode == "cluster" && fs::exists(clusterFilePath))) {
+      int rc = maraclusterAdapter.run();
+      if (rc != EXIT_SUCCESS) {
+        std::cerr << "MaRaCluster failed with exit code " << rc << ". Terminating.." << std::endl;
+        return rc;
+      }
+    } else if (Globals::VERB > 1) {
+      std::cerr << "Found cluster result file at " << clusterFilePath << ". Remove this file to redo clustering." << std::endl;
     }
+      
 
-    if (useTempFiles_ && (mode.empty() || mode == "index" || mode == "batch")) {
+    if (useTempFiles_ && createIndex) {
       unloadAllFeatures(allFeatures);
     }
     
-    if (mode.empty() || mode == "index" || mode == "batch") {
+    if (createIndex) {
       spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
       if (Globals::VERB > 1) {
         std::cerr << "Serialized spectrum to precursor map" << std::endl;
       }
-    } else if (mode == "cluster") {
-      spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
-      if (Globals::VERB > 1) {
-        std::cerr << "Deserialized spectrum to precursor map" << std::endl;
-      }
-    }
-  } else {
-    spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
-    if (Globals::VERB > 1) {
-      std::cerr << "Deserialized spectrum to precursor map" << std::endl;
     }
   }
 
-  clusterFilePath = maraclusterAdapter.getClusterFileName();
   return EXIT_SUCCESS;
 }
 
@@ -725,17 +719,19 @@ int Quandenser::run() {
     /* TODO: what if we use files with the same filename but in different folders? */
     dinosaurFeatureFile /= mzMLFile.stem().string() + ".features.tsv";
     dinosaurFeatureFiles.push_back(dinosaurFeatureFile);
-    if (!fs::exists(dinosaurFeatureFile)) {
-      if (Globals::VERB > 1) {
-        std::cerr << "Processing " << mzMLFile.filename() << " with Dinosaur." << std::endl;
+    if (!isPartialRun || partial1Dinosaur_ >= 0) {
+      if (!fs::exists(dinosaurFeatureFile)) {
+        if (Globals::VERB > 1) {
+          std::cerr << "Processing " << mzMLFile.filename() << " with Dinosaur." << std::endl;
+        }
+        rc = DinosaurIO::runDinosaurGlobal(dinosaurFolder.string(), mzMLFile.string());
+        if (rc != EXIT_SUCCESS) {
+          std::cerr << "Dinosaur failed with exit code " << rc << ". Terminating.." << std::endl;
+          return EXIT_FAILURE;
+        }
+      } else if (Globals::VERB > 1) {
+        std::cerr << "Already processed " << mzMLFile.filename() << " with Dinosaur." << std::endl;
       }
-      rc = DinosaurIO::runDinosaurGlobal(dinosaurFolder.string(), mzMLFile.string());
-      if (rc != EXIT_SUCCESS) {
-        std::cerr << "Dinosaur failed with exit code " << rc << ". Terminating.." << std::endl;
-        return EXIT_FAILURE;
-      }
-    } else if (Globals::VERB > 1) {
-      std::cerr << "Already processed " << mzMLFile.filename() << " with Dinosaur." << std::endl;
     }
   }
 
@@ -795,12 +791,28 @@ int Quandenser::run() {
       allFeatures.push_back(ftList);
       fs::path ftFilePath(fileList.getFilePath(fileIdx));
       std::string fn(ftFilePath.filename().string());
+      
+      bool createMaRaClusterIndex = (!partial2MaRaCluster_.empty() &&
+                                      (partial2MaRaCluster_ == "index" 
+                                      || partial2MaRaCluster_ == "batch"))
+                                     || (!partial4Consensus_.empty() &&
+                                      (partial4Consensus_ == "index" 
+                                      || partial4Consensus_ == "batch"
+                                      || partial4Consensus_ == "cluster"));
+      
       // Check if the pair assigned exists in the pair folder
-      if (partial3MatchRound_ == 0
-          || (partial3MatchRound_ > 0 &&
-               (fs::exists("pair/file1/" + fn)
-                || fs::exists("pair/file2/" + fn))) 
-          || ((!partial2MaRaCluster_.empty() || !partial4Consensus_.empty()) && !useTempFiles_)) {
+      bool processRunInAlignment = (partial3MatchRound_ == 0
+                                || (partial3MatchRound_ > 0 &&
+                                     (fs::exists("pair/file1/" + fn)
+                                      || fs::exists("pair/file2/" + fn)))); 
+      
+      /**
+        If useTempFiles is set and partial runs are activated, we load the 
+        features from temporary files. Otherwise, we need to get the features
+        only in "batch" and "index" modes, as well as in the "cluster" mode
+        for partial4Consensus_.
+       **/
+      if ((createMaRaClusterIndex && !useTempFiles_) || processRunInAlignment) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
         bool withIdxMap = true;
         size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
@@ -821,12 +833,17 @@ int Quandenser::run() {
   /* spectrumToPrecursorMap:
        filled by runMaRaCluster();
        consumed by MaRaClusterIO::parseClustersForRTimePairs() */
-  SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
   std::string maraclusterSubFolder = "maracluster";
+  fs::path spectrumToPrecursorFilePath(outputFolder_);
+  spectrumToPrecursorFilePath /= maraclusterSubFolder;
+  spectrumToPrecursorFilePath /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
+  std::string spectrumToPrecursorFile = spectrumToPrecursorFilePath.string();
   std::string clusterFilePath;
-  rc = runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath,
-	   spectrumToPrecursorMap, tmpFilePrefixAlign, partial2MaRaCluster_);
-  if (rc != EXIT_SUCCESS) return rc;
+  if (!isPartialRun || !partial2MaRaCluster_.empty()) {
+    rc = runMaRaCluster(maraclusterSubFolder, fileList, allFeatures, clusterFilePath,
+	     spectrumToPrecursorFile, tmpFilePrefixAlign, partial2MaRaCluster_);
+    if (rc != EXIT_SUCCESS) return rc;
+  }
   
   if (!partial2MaRaCluster_.empty() && partial2MaRaCluster_ != "batch" && partial2MaRaCluster_ != "cluster") {
     if (Globals::VERB > 2) {
@@ -849,8 +866,16 @@ int Quandenser::run() {
   featureAlignFile /= "maracluster";
   featureAlignFile /= "alignRetention.txt";
   
-  if (!isPartialRun || !partial2MaRaCluster_.empty()) {
+  SpectrumToPrecursorMap spectrumToPrecursorMap(fileList.size());
+  
+  if (!isPartialRun || (!partial2MaRaCluster_.empty() && !fs::exists(featureAlignFile) && !fs::exists(featureAlignQueueFile))) {
     std::ifstream fileStream(clusterFilePath.c_str(), ios::in);
+    
+    spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
+    if (Globals::VERB > 1) {
+      std::cerr << "Deserialized spectrum to precursor map" << std::endl;
+    }
+    
     MaRaClusterIO::parseClustersForRTimePairs(fileStream, fileList, spectrumToPrecursorMap, alignRetention.getRTimePairsRef());
 
     alignRetention.getAlignModelsTree();
@@ -912,6 +937,7 @@ int Quandenser::run() {
       } else if (fs::exists("pair/file1/" + alignFromFile) &&
                  fs::exists("pair/file2/" + alignToFile)) {
         featureAlignmentQueue.push_back(std::make_pair(round, filePair));
+        alignRetention.loadState(featureAlignFile.string(), filePair);
         addedFeaturesFile = getAddedFeaturesFN(matchedFeaturesFile, alignFromIdx, alignToIdx);
         if (featuresAdded[alignFromIdx]) allFeatures.at(alignFromIdx).sortByPrecMz();
         if (featuresAdded[alignToIdx]) allFeatures.at(alignToIdx).sortByPrecMz();
@@ -950,7 +976,10 @@ int Quandenser::run() {
     infile.close();
     
     // Load state of alignRetention
-    alignRetention.loadState(featureAlignFile.string());
+    if (partial3MatchRound_ == 0 || (!useTempFiles_  && (partial4Consensus_ == "batch" || partial4Consensus_ == "cluster"))) {
+      FilePair alignedFilePair(-1,-1);
+      alignRetention.loadState(featureAlignFile.string(), alignedFilePair);
+    }
     std::cerr << "Partial run: Loading alignments and alignment tree completed" << std::endl;
   }
 
@@ -967,8 +996,15 @@ int Quandenser::run() {
 		      alignPpmTol_, alignRTimeStdevTol_, decoyOffset_, linkPEPThreshold_,
 		      linkPEPMbrSearchThreshold_, maxFeatureCandidates_);
   
-  if (!(!partial4Consensus_.empty() && useTempFiles_)) {
-    featureAlignment.matchFeatures(featureAlignmentQueue, fileList, alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
+  /**
+    If useTempFiles is set and partial runs are activated, we load the matches 
+    from temporary files. Otherwise, we need to get the matches only in "batch"
+    and "cluster" modes.   
+   **/
+  if (!isPartialRun || partial3MatchRound_ >= 0 || (!useTempFiles_ 
+      && (partial4Consensus_ == "batch" || partial4Consensus_ == "cluster"))) {
+    featureAlignment.matchFeatures(featureAlignmentQueue, fileList, 
+        alignRetention, allFeatures, addedFeaturesFile, tmpFilePrefixAlign);
   }
 
   if (partial3MatchRound_ >= 0) {  // parallel 3 runs dinosaur.
@@ -989,9 +1025,12 @@ int Quandenser::run() {
 
 	std::string maraclusterSubFolderExtraFeatures = "maracluster_extra_features";
 	std::string clusterFilePathExtraFeatures;
-	SpectrumToPrecursorMap spectrumToPrecursorMapExtraFeatures(fileList.size());
+	fs::path spectrumToPrecursorFilePathExtraFeatures(outputFolder_);
+  spectrumToPrecursorFilePathExtraFeatures /= maraclusterSubFolderExtraFeatures;
+  spectrumToPrecursorFilePathExtraFeatures /= fnPrefix_ + ".spectrum_to_precursor_map.dat";
+  std::string spectrumToPrecursorFileExtraFeatures = spectrumToPrecursorFilePathExtraFeatures.string();
 	rc = runMaRaCluster(maraclusterSubFolderExtraFeatures, fileList, allFeatures,
-			   clusterFilePathExtraFeatures, spectrumToPrecursorMapExtraFeatures,
+			   clusterFilePathExtraFeatures, spectrumToPrecursorFileExtraFeatures,
 			   tmpFilePrefixAlign, partial4Consensus_);
   if (rc != EXIT_SUCCESS) return rc;
   
@@ -1025,7 +1064,14 @@ int Quandenser::run() {
 			Step 7: Keep top 3 consensus spectra per feature group based on
 			        intensity score
 		****************************************************************************/
-
+  
+  if (isPartialRun) {
+    spectrumToPrecursorMap.deserialize(spectrumToPrecursorFile);
+    if (Globals::VERB > 1) {
+      std::cerr << "Deserialized spectrum to precursor map" << std::endl;
+    }
+  }
+  
   std::map<FeatureId, std::vector<int> > featureToSpectrumCluster;
   std::ifstream fileStreamExtraFeatures(clusterFilePathExtraFeatures.c_str(), ios::in);
   MaRaClusterIO::parseClustersForConsensusMerge(fileStreamExtraFeatures,

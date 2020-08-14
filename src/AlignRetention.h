@@ -84,7 +84,7 @@ class AlignRetention {
   void getAlignModelsTree();
   void createMinDepthTree(std::vector<std::pair<int, FilePair> >& featureAlignmentQueue);
   int saveState(const std::string& alignFilePath);
-  void loadState(const std::string& alignFilePath);
+  void loadState(const std::string& alignFilePath, const FilePair& alignedFilePair);
 
   SplineRegression& getAlignment(FilePair& filePair) { return alignments_[filePair]; }
 
