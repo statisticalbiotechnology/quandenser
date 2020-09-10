@@ -182,19 +182,21 @@ void FeatureGroups::filterConsensusFeatures(
         
         int fileIdx = ftIt->fileIdx;
         int featureIdx = ftIt->scannr;
-        
-        const DinosaurFeature& ft = allFeatures.at(fileIdx).at(featureIdx);
-        
-        std::vector<int> clusterIdxs(featureToSpectrumCluster.find(*ftIt)->second);
-        std::vector<int>::const_iterator clusterIdxIt;
-        for (clusterIdxIt = clusterIdxs.begin(); 
-             clusterIdxIt != clusterIdxs.end(); ++clusterIdxIt) {
-          if (maxIntensity.find(*clusterIdxIt) == maxIntensity.end()) {
-            maxIntensity[*clusterIdxIt].first = std::vector<float>(numRuns);
-          }
-          maxIntensity[*clusterIdxIt].second.push_back(*ftIt);
-          if (ft.intensity > maxIntensity[*clusterIdxIt].first[fileIdx]) {
-            maxIntensity[*clusterIdxIt].first[fileIdx] = ft.intensity;
+        int vectorIdx = allFeatures.at(fileIdx).getVectorIdx(featureIdx);
+        if (vectorIdx >= 0) {
+          const DinosaurFeature& ft = allFeatures.at(fileIdx).at(vectorIdx);
+          
+          std::vector<int> clusterIdxs(featureToSpectrumCluster.find(*ftIt)->second);
+          std::vector<int>::const_iterator clusterIdxIt;
+          for (clusterIdxIt = clusterIdxs.begin(); 
+               clusterIdxIt != clusterIdxs.end(); ++clusterIdxIt) {
+            if (maxIntensity.find(*clusterIdxIt) == maxIntensity.end()) {
+              maxIntensity[*clusterIdxIt].first = std::vector<float>(numRuns);
+            }
+            maxIntensity[*clusterIdxIt].second.push_back(*ftIt);
+            if (ft.intensity > maxIntensity[*clusterIdxIt].first[fileIdx]) {
+              maxIntensity[*clusterIdxIt].first[fileIdx] = ft.intensity;
+            }
           }
         }
       }
@@ -272,9 +274,9 @@ void FeatureGroups::printFeatureGroups(
       int fileIdx = ftIdIt->fileIdx;
       int featureIdx = ftIdIt->scannr;
       
-      const DinosaurFeature& ft = allFeatures.at(fileIdx).at(featureIdx);
-      
-      if (ft.intensity > 0) { /* do not print placeholders */
+      int vectorIdx = allFeatures.at(fileIdx).getVectorIdx(featureIdx);
+      if (vectorIdx >= 0) { /* do not print placeholders */
+        const DinosaurFeature& ft = allFeatures.at(fileIdx).at(vectorIdx);
         features.push_back(ft);
         uniqueFileIdxs.insert(ft.fileIdx);          
         sumPrecMz += ft.precMz;

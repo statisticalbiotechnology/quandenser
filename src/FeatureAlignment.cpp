@@ -90,7 +90,6 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
   }
   alignment.predict(rTimesQueryRun, predictedRTimesTargetRun);
   float rTimeStdev = alignment.getRmse();
-  DinosaurFeatureList candidateFeaturesTargetRun;
 
   std::string percolatorOutputFile = percolatorOutputFileBaseFN_ + "/link_" +
     boost::lexical_cast<std::string>(filePair.fileIdx1) + "_to_" +
@@ -99,10 +98,12 @@ void FeatureAlignment::getFeatureMap(FilePair& filePair,
     matchFeatures(percolatorOutputFile, featuresQueryRun, featuresTargetRun,
                  predictedRTimesTargetRun, rTimeStdev);
   }
-  addFeatureLinks(percolatorOutputFile, candidateFeaturesTargetRun,
+  DinosaurFeatureList candidateFeaturesTargetRunDummy; /* will stay empty in non-target mode */
+  addFeatureLinks(percolatorOutputFile, candidateFeaturesTargetRunDummy,
                   featuresTargetRun, featureMatches_[filePair], addedFeaturesFile);
 
   if (linkPEPMbrSearchThreshold_ < 1.0) {
+    DinosaurFeatureList candidateFeaturesTargetRun;
     std::string percolatorMbrOutputFile = percolatorOutputFileBaseFN_ +
       "/search_and_link_" +
       boost::lexical_cast<std::string>(filePair.fileIdx1) + "_to_" +
@@ -157,7 +158,7 @@ void FeatureAlignment::insertPlaceholderFeatures(
       placeholderFt.intensity = 0.0;
       if (placeholderFt.featureIdx < 0) {
         placeholderFt.featureIdx = featuresTargetRun.size();
-        featuresTargetRun.push_back(placeholderFt);
+        featuresTargetRun.push_back_with_ft_to_idx_map(placeholderFt);
         if (!addedFeaturesFile.empty()) {
           placeholderFeatures.push_back(placeholderFt);
         }
@@ -272,7 +273,7 @@ void FeatureAlignment::addFeatureLinks(const std::string& percolatorOutputFile,
         if (candFt.featureIdx < 0) {
           candFt.featureIdx = featuresTargetRun.size();
           candFt.fileIdx = targetFileIdx;
-          featuresTargetRun.push_back(candFt);
+          featuresTargetRun.push_back_with_ft_to_idx_map(candFt);
           if (!addedFeaturesFile.empty()) {
             addedTargetFeatures.push_back(candFt);
           }
@@ -377,7 +378,7 @@ void FeatureAlignment::mbrMatchFeatures(
 
   /* TODO: put these in a separate folder */
   std::string targetFile = percolatorOutputFile + ".dinosaur_targets.tsv";
-  if (Globals::fileIsEmpty(targetFile)) {
+  if (Globals::fileIsEmpty(targetFile) && Globals::fileIsEmpty(percolatorOutputFile)) {
     std::ofstream targetFileStream(targetFile.c_str(), ios::out);
     targetFileStream << "mz\tcharge\tmzDiff\trtStart\trtEnd\tminApexInt\tid" << std::endl;
 
@@ -408,7 +409,7 @@ void FeatureAlignment::mbrMatchFeatures(
   std::string outputDir = percolatorOutputFile + "_dinosaur"; /* TODO: put these in a separate folder */
   std::string dinosaurOutputFile = outputDir + "/" +
       targetMzMLFilePath.stem().string() + ".targets.csv";
-  if (Globals::fileIsEmpty(dinosaurOutputFile)) {
+  if (Globals::fileIsEmpty(dinosaurOutputFile) && Globals::fileIsEmpty(percolatorOutputFile)) {
     boost::filesystem::path dinosaurOutputDir(outputDir);
     boost::system::error_code returnedError;
     boost::filesystem::create_directories(dinosaurOutputDir, returnedError);
@@ -440,68 +441,76 @@ void FeatureAlignment::processDinosaurTargets(
     const DinosaurFeatureList& featuresQueryRun,
     const DinosaurFeatureList& featuresTargetRun,
     const std::vector<double>& predictedRTimesTargetRun,
-    DinosaurFeatureList& candidateFeaturesTargetRun) {
-  std::vector<std::string> percolatorArgs = percolatorArgs_;
+    DinosaurFeatureList& candidateFeaturesTargetRun) {  
+  std::string dinosaurTargetOutputDatFile = dinosaurTargetOutputFile + ".dat";
+  if (Globals::fileIsEmpty(dinosaurTargetOutputDatFile)) {
+    std::vector<std::string> percolatorArgs = percolatorArgs_;
 
-  PercolatorAdapter percolatorAdapter;
-  bool runPercolator = false;
-  if (Globals::fileIsEmpty(percolatorOutputFile)) {
-    runPercolator = true;
-    percolatorArgs.push_back("--results-psms");
-    percolatorArgs.push_back(percolatorOutputFile);
-    percolatorArgs.push_back("--decoy-results-psms");
-    percolatorArgs.push_back(percolatorOutputFile + ".decoys");
-    /*
-    percolatorArgs.push_back("--tab-out");
-    percolatorArgs.push_back(percolatorOutputFile + ".pin");
-    */
+    PercolatorAdapter percolatorAdapter;
+    bool runPercolator = false;
+    if (Globals::fileIsEmpty(percolatorOutputFile)) {
+      runPercolator = true;
+      percolatorArgs.push_back("--results-psms");
+      percolatorArgs.push_back(percolatorOutputFile);
+      percolatorArgs.push_back("--decoy-results-psms");
+      percolatorArgs.push_back(percolatorOutputFile + ".decoys");
+      /*
+      percolatorArgs.push_back("--tab-out");
+      percolatorArgs.push_back(percolatorOutputFile + ".pin");
+      */
 
-    percolatorAdapter.parseOptions(percolatorArgs);
-    percolatorAdapter.init(kLinkFeatureNames);
-  }
+      percolatorAdapter.parseOptions(percolatorArgs);
+      percolatorAdapter.init(kLinkFeatureNames);
+    }
+    
+    std::ifstream dinosaurOutputStream(dinosaurTargetOutputFile.c_str(), ios::in);
 
-  std::ifstream dinosaurOutputStream(dinosaurTargetOutputFile.c_str(), ios::in);
+    std::string targetLine;
+    getline(dinosaurOutputStream, targetLine); /* skip header */
 
-  std::string targetLine;
-  getline(dinosaurOutputStream, targetLine); /* skip header */
+    DinosaurFeatureList::const_iterator queryIt;
+    std::vector<double>::const_iterator predRTimeIt;
+    for (queryIt = featuresQueryRun.begin(), predRTimeIt = predictedRTimesTargetRun.begin();
+         queryIt != featuresQueryRun.end(); ++queryIt, ++predRTimeIt) {
+      if (precursorLinks.find(queryIt->featureIdx) == precursorLinks.end() ||
+          precursorLinks.find(queryIt->featureIdx)->second.posteriorErrorProb >= linkPEPMbrSearchThreshold_) {
+        getline(dinosaurOutputStream, targetLine);
+        DinosaurFeature targetFeature = DinosaurIO::parseDinosaurFeatureRow(targetLine);
+        targetFeature.fileIdx = -1;
+        if (targetFeature.intensity > 0.0) {
+          targetFeature.featureIdx = candidateFeaturesTargetRun.getFeatureIdx(targetFeature);
+          if (targetFeature.featureIdx == -1) {
+            targetFeature.featureIdx = getCandidateIdx(candidateFeaturesTargetRun.size());
+            candidateFeaturesTargetRun.push_back(targetFeature);
+          }
+        }
 
-  DinosaurFeatureList::const_iterator queryIt;
-  std::vector<double>::const_iterator predRTimeIt;
-  for (queryIt = featuresQueryRun.begin(), predRTimeIt = predictedRTimesTargetRun.begin();
-       queryIt != featuresQueryRun.end(); ++queryIt, ++predRTimeIt) {
-    if (precursorLinks.find(queryIt->featureIdx) == precursorLinks.end() ||
-        precursorLinks.find(queryIt->featureIdx)->second.posteriorErrorProb >= linkPEPMbrSearchThreshold_) {
-      getline(dinosaurOutputStream, targetLine);
-      DinosaurFeature targetFeature = DinosaurIO::parseDinosaurFeatureRow(targetLine);
-      targetFeature.fileIdx = -1;
-      if (targetFeature.intensity > 0.0) {
-        targetFeature.featureIdx = candidateFeaturesTargetRun.getFeatureIdx(targetFeature);
-        if (targetFeature.featureIdx == -1) {
-          targetFeature.featureIdx = getCandidateIdx(candidateFeaturesTargetRun.size());
-          candidateFeaturesTargetRun.push_back(targetFeature);
+        getline(dinosaurOutputStream, targetLine);
+        if (runPercolator) {
+          DinosaurFeature decoyFeature = DinosaurIO::parseDinosaurFeatureRow(targetLine);
+          decoyFeature.featureIdx = -1;
+          decoyFeature.fileIdx = -1;
+
+          DinosaurFeature queryFeature = *queryIt;
+          queryFeature.rTime = *predRTimeIt;
+          if (targetFeature.intensity > 0.0)
+            addLinkPsm(1, queryFeature, targetFeature, percolatorAdapter);
+
+          queryFeature.precMz += decoyOffset_;
+          if (decoyFeature.intensity > 0.0)
+            addLinkPsm(-1, queryFeature, decoyFeature, percolatorAdapter);
         }
       }
-
-      getline(dinosaurOutputStream, targetLine);
-      if (runPercolator) {
-        DinosaurFeature decoyFeature = DinosaurIO::parseDinosaurFeatureRow(targetLine);
-        decoyFeature.featureIdx = -1;
-        decoyFeature.fileIdx = -1;
-
-        DinosaurFeature queryFeature = *queryIt;
-        queryFeature.rTime = *predRTimeIt;
-        if (targetFeature.intensity > 0.0)
-          addLinkPsm(1, queryFeature, targetFeature, percolatorAdapter);
-
-        queryFeature.precMz += decoyOffset_;
-        if (decoyFeature.intensity > 0.0)
-          addLinkPsm(-1, queryFeature, decoyFeature, percolatorAdapter);
-      }
     }
-  }
+    
+    bool append = false;
+    candidateFeaturesTargetRun.saveToFile(dinosaurTargetOutputDatFile, append);
 
-  if (runPercolator) {
-    percolatorAdapter.process();
+    if (runPercolator) {
+      percolatorAdapter.process();
+    }
+  } else {
+    size_t ftsAdded = candidateFeaturesTargetRun.loadFromFile(dinosaurTargetOutputDatFile);
   }
 }
 

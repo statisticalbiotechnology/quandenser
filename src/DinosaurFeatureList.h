@@ -76,7 +76,10 @@ class DinosaurFeatureList {
   }
   inline void push_back(const DinosaurFeature& ft) {
     features_.push_back(ft);
-    featureToIdxMap_[ft] = ft.featureIdx;
+  }
+  inline void push_back_with_ft_to_idx_map(const DinosaurFeature& ft) {
+    features_.push_back(ft);
+    featureToFeatureIdxMap_[ft] = ft.featureIdx;
   }
   inline const DinosaurFeature& at(size_t n) const { return features_.at(n); }
   inline DinosaurFeature& at(size_t n) { return features_.at(n); }
@@ -84,39 +87,39 @@ class DinosaurFeatureList {
   inline bool isInitialized() const { return isInitialized_; }
   inline void setInitialized() { isInitialized_ = true; }
 
-  inline void clearFeatureToIdxMap() { featureToIdxMap_.clear(); }
+  inline void clearFeatureToIdxMap() { featureToFeatureIdxMap_.clear(); }
   inline int getFeatureIdx(const DinosaurFeature& ft) const {
-    if (featureToIdxMap_.find(ft) != featureToIdxMap_.end()) {
-      return featureToIdxMap_.find(ft)->second;
+    if (featureToFeatureIdxMap_.find(ft) != featureToFeatureIdxMap_.end()) {
+      return featureToFeatureIdxMap_.find(ft)->second;
+    } else {
+      return -1;
+    }
+  }
+  
+  inline int getVectorIdx(size_t featureIdx) const {
+    if (featureIdxToVectorIdxMap_.find(featureIdx) != featureIdxToVectorIdxMap_.end()) {
+      return featureIdxToVectorIdxMap_.find(featureIdx)->second;
     } else {
       return -1;
     }
   }
 
-  size_t loadFromFile(const std::string& ftFile, bool withIdxMap = false) {
+  size_t loadFromFile(const std::string& ftFile, bool withIdxMap = false, 
+      bool ignoreDuplicates = false, bool removePlaceholders = false) {
     std::vector<DinosaurFeature> addedFts;
     maracluster::BinaryInterface::read(ftFile, addedFts);
     features_.reserve(features_.size() + addedFts.size());
     for (DinosaurFeature& df : addedFts) {
-      if (withIdxMap) {
-        push_back(df);
-      } else {
-        features_.push_back(df);
-      }
-    }
-    return addedFts.size();
-  }
-  
-  size_t loadFromFileCheckDuplicates(const std::string& ftFile, bool withIdxMap = false) {
-    std::vector<DinosaurFeature> addedFts;
-    maracluster::BinaryInterface::read(ftFile, addedFts);
-    for (DinosaurFeature& df : addedFts) {
-      if (getFeatureIdx(df) == -1) { // this mimicks the MBR feature adding
-        df.featureIdx = size(); // re-index before adding to the featurelist
+      if ((!removePlaceholders || df.intensity > 0.0) && 
+              (!ignoreDuplicates || getFeatureIdx(df) == -1)) { /* this mimicks the MBR feature adding */
+        if (ignoreDuplicates) {
+          df.featureIdx = size(); /* re-index before adding to the featurelist */
+        }
+        
         if (withIdxMap) {
-          push_back(df);
+          push_back_with_ft_to_idx_map(df);
         } else {
-          features_.push_back(df);
+          push_back(df);
         }
       }
     }
@@ -125,6 +128,13 @@ class DinosaurFeatureList {
 
   void saveToFile(const std::string& ftFile, bool append) {
     maracluster::BinaryInterface::write(features_, ftFile, append);
+  }
+  
+  void buildFeatureIdxToVectorIdxMap() {
+    size_t featureIdx = 0u;
+    for (const DinosaurFeature& df : features_) {
+      featureIdxToVectorIdxMap_[df.featureIdx] = featureIdx++;
+    }
   }
 
   inline void sortByPrecMz() { std::sort(features_.begin(), features_.end(), lessPrecMz); }
@@ -141,8 +151,12 @@ class DinosaurFeatureList {
  protected:
   FeatureList features_;
   bool isInitialized_;
-  boost::unordered_map<DinosaurFeature, int, DinosaurFeatureHash, DinosaurFeatureEqual> featureToIdxMap_;
-
+  
+  /* this map is used in FeatureAlignment.cpp to find features in the 
+     DinosaurFeatureList based on a deserialized Percolator PSM id.
+     See getFeatureIdx() */
+  boost::unordered_map<DinosaurFeature, int, DinosaurFeatureHash, DinosaurFeatureEqual> featureToFeatureIdxMap_;
+  boost::unordered_map<int, int> featureIdxToVectorIdxMap_;
 };
 
 } /* namespace quandenser */

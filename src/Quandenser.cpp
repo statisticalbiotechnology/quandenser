@@ -474,7 +474,10 @@ void Quandenser::loadAllFeatures(const std::string& tmpFilePrefixAlign,
     std::vector<DinosaurFeatureList>& allFeatures) {
   for (size_t i = 0; i < allFeatures.size(); ++i) {
     std::string fileName = getFeatureFN(fs::path(tmpFilePrefixAlign) / "features", i);
-    allFeatures.at(i).loadFromFile(fileName);
+    bool withIdxMap = false;
+    bool ignoreDuplicates = false;
+    bool removePlaceholders = true;
+    allFeatures.at(i).loadFromFile(fileName, withIdxMap, ignoreDuplicates, removePlaceholders);
     if (Globals::VERB > 2) {
       std::cerr << "Read in " << allFeatures.at(i).size() << " features from " << fileName << std::endl;
     }
@@ -814,7 +817,7 @@ int Quandenser::run() {
        **/
       if ((createMaRaClusterIndex && !useTempFiles_) || processRunInAlignment) {
         std::string featureListFile = getFeatureFN(featureOutFile, fileIdx);
-        bool withIdxMap = true;
+        bool withIdxMap = processRunInAlignment;
         size_t ftsAdded = allFeatures.at(fileIdx).loadFromFile(featureListFile, withIdxMap);
         if (Globals::VERB > 2) {
           std::cerr << "Read in " << allFeatures.at(fileIdx).size() << " features from " << featureListFile << std::endl;
@@ -953,10 +956,16 @@ int Quandenser::run() {
            fs::exists("pair/file2/" + alignToFile))) {
         std::string savedAddedFeaturesFile = getAddedFeaturesFN(matchedFeaturesFile, alignFromIdx, alignToIdx);
         bool withIdxMap = true;
-        size_t addedFts = allFeatures.at(alignToIdx).loadFromFileCheckDuplicates(savedAddedFeaturesFile, withIdxMap);
-        std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile 
-                  << " (total: " << allFeatures.at(alignToIdx).size() << " features)" << std::endl;
-        featuresAdded[alignToIdx] = true;
+        bool ignoreDuplicates = true;
+        bool removePlaceholders = false;
+        size_t addedFts = allFeatures.at(alignToIdx).loadFromFile(
+            savedAddedFeaturesFile, withIdxMap, ignoreDuplicates, removePlaceholders);
+        featuresAdded[alignToIdx] = (addedFts > 0);
+        
+        if (Globals::VERB > 2) {
+          std::cerr << "Read in " << addedFts << " features from " << savedAddedFeaturesFile 
+                    << " (total: " << allFeatures.at(alignToIdx).size() << " features)" << std::endl;
+        }
         
         // update --use-tmp-files match files for matchFrom run 
         if (fs::exists("pair/file1/" + alignToFile) && useTempFiles_) {
@@ -965,7 +974,9 @@ int Quandenser::run() {
           }
           
           DinosaurFeatureList addedFeatures;
-          addedFeatures.loadFromFileCheckDuplicates(savedAddedFeaturesFile);
+          
+          addedFeatures.loadFromFile(savedAddedFeaturesFile, withIdxMap, 
+                                     ignoreDuplicates, removePlaceholders);
           
           updateMatchesTmpFile(fs::path(tmpFilePrefixAlign) / "matches", 
               filePair, allFeatures.at(alignToIdx), addedFeatures,
@@ -1088,7 +1099,7 @@ int Quandenser::run() {
   }
 
   for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
-    ftListIt->sortByFeatureIdx();
+    ftListIt->buildFeatureIdxToVectorIdxMap();
   }
 
   featureGroups.filterConsensusFeatures(allFeatures, featureToSpectrumCluster);
