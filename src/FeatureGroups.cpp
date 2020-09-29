@@ -35,6 +35,7 @@ void FeatureGroups::singleLinkClustering(
     const std::string& tmpFilePrefixAlign) {
   size_t numFiles = featureAlignmentQueue.size() / 2 + 1;
   std::vector<FeatureToGroupMap> featureIdToGroupId(numFiles);
+  std::vector<std::set<size_t> > linksToObservedFeature(numFiles);
   std::map<size_t, size_t> groupIdMap;
   
   if (!tmpFilePrefixGroup.empty()) {
@@ -47,62 +48,48 @@ void FeatureGroups::singleLinkClustering(
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   int filePairCnt = 0;
   for (filePairIt = featureAlignmentQueue.begin(); 
-       filePairIt != featureAlignmentQueue.end(); 
+       filePairIt != featureAlignmentQueue.begin() + (featureAlignmentQueue.size() / 2); 
        ++filePairIt, ++filePairCnt) {
     FilePair filePair = filePairIt->second;
-    int fileIdx1 = filePair.fileIdx1;
-    int fileIdx2 = filePair.fileIdx2;
+    int queryFileIdx = filePair.fileIdx1;
+    int targetFileIdx = filePair.fileIdx2;
     
-    FeatureToGroupMap& queryFeatureIdToGroupId = featureIdToGroupId.at(fileIdx1);
-    FeatureToGroupMap& targetFeatureIdToGroupId = featureIdToGroupId.at(fileIdx2);
+    FeatureToGroupMap& queryFeatureIdToGroupId = featureIdToGroupId.at(queryFileIdx);
+    FeatureToGroupMap& targetFeatureIdToGroupId = featureIdToGroupId.at(targetFileIdx);
     
     if (!tmpFilePrefixGroup.empty()) {
-      queryFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx1) + ".dat");
-      targetFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx2) + ".dat");
-    }
-    
-    if (!tmpFilePrefixAlign.empty()) {
-      std::string matchesFileName = FeatureAlignment::getAddedFeaturesFN(
-        tmpFilePrefixAlign + "/matches", filePair.fileIdx1, filePair.fileIdx2);
-      FeatureAlignment::loadFromFile(matchesFileName, featureMatches[filePair]);
+      queryFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(queryFileIdx) + ".dat");
+      targetFeatureIdToGroupId.loadFromFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(targetFileIdx) + ".dat");
     }
     
     if (Globals::VERB > 2) {
       std::cerr << "Processing pair " << filePairCnt+1 << "/" 
-          << featureAlignmentQueue.size() 
-          << ": " << fileIdx1 << "->" << fileIdx2 << " (" 
-          << featureMatches[filePair].size() << " links)" << std::endl;
+          << featureAlignmentQueue.size() / 2 << std::endl;
     }
     
-    std::map<int, FeatureIdxMatch>::const_iterator ftIdxMatchIt;
-    for (ftIdxMatchIt = featureMatches[filePair].begin(); 
-         ftIdxMatchIt != featureMatches[filePair].end();
-         ++ftIdxMatchIt) {
-      int queryFeatureIdx = ftIdxMatchIt->first;
-      int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
-      float posteriorErrorProb = ftIdxMatchIt->second.posteriorErrorProb;
-      
-      /* placeholders have a PEP of 1.0 and will destroy the score, deal with 
-         this some other way downstream... */
-      if (posteriorErrorProb == 1.0) posteriorErrorProb = 0.0;
-      
-      FeatureId queryFeatureId(fileIdx1, queryFeatureIdx);
-      FeatureId targetFeatureId(fileIdx2, targetFeatureIdx);
-      
-      addToFeatureGroup(queryFeatureId, targetFeatureId, posteriorErrorProb,
-          queryFeatureIdToGroupId, targetFeatureIdToGroupId, groupIdMap);
-    }
+    bool isRevFilePair = false;
+    processFeatureAlignment(filePair, featureMatches[filePair], 
+        tmpFilePrefixAlign, queryFeatureIdToGroupId, targetFeatureIdToGroupId,
+        linksToObservedFeature.at(queryFileIdx), linksToObservedFeature.at(targetFileIdx), 
+        groupIdMap, isRevFilePair);
+    
+    FilePair revFilePair = filePair.getRevFilePair();
+    isRevFilePair = true;
+    processFeatureAlignment(revFilePair, featureMatches[revFilePair], 
+        tmpFilePrefixAlign, queryFeatureIdToGroupId, targetFeatureIdToGroupId,
+        linksToObservedFeature.at(queryFileIdx), linksToObservedFeature.at(targetFileIdx), 
+        groupIdMap, isRevFilePair);
     
     if (!tmpFilePrefixGroup.empty()) {
       bool append = false;
-      queryFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx1) + ".dat", append);
-      targetFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(fileIdx2) + ".dat", append);
+      queryFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(queryFileIdx) + ".dat", append);
+      targetFeatureIdToGroupId.saveToFile(tmpFilePrefixGroup + boost::lexical_cast<std::string>(targetFileIdx) + ".dat", append);
       
       queryFeatureIdToGroupId.clear();
       targetFeatureIdToGroupId.clear();
     }
     
-    featureMatches[filePair].clear();
+    linksToObservedFeature.at(queryFileIdx).clear();
   }
   
   if (!tmpFilePrefixGroup.empty()) {
@@ -111,6 +98,62 @@ void FeatureGroups::singleLinkClustering(
       remove(fileName.c_str());
     }
   }
+}
+
+void FeatureGroups::processFeatureAlignment(FilePair& filePair, 
+    std::map<int, FeatureIdxMatch>& filePairFeatureMatches,
+    const std::string& tmpFilePrefixAlign,
+    FeatureToGroupMap& queryFeatureIdToGroupId,
+    FeatureToGroupMap& targetFeatureIdToGroupId,
+    std::set<size_t>& queryLinksToObservedFeature,
+    std::set<size_t>& targetLinksToObservedFeature,
+    std::map<size_t, size_t>& groupIdMap,
+    bool isRevFilePair) {
+  int queryFileIdx = filePair.fileIdx1;
+  int targetFileIdx = filePair.fileIdx2;
+  
+  if (!tmpFilePrefixAlign.empty()) {
+    std::string matchesFileName = FeatureAlignment::getAddedFeaturesFN(
+      tmpFilePrefixAlign + "/matches", queryFileIdx, targetFileIdx);
+    FeatureAlignment::loadFromFile(matchesFileName, filePairFeatureMatches);
+  }
+  
+  if (Globals::VERB > 2) {
+    std::cerr << "  " << queryFileIdx << "->" << targetFileIdx << " (" 
+        << filePairFeatureMatches.size() << " links)" << std::endl;
+  }
+  
+  if (isRevFilePair) std::swap(queryFileIdx, targetFileIdx);
+  
+  std::map<int, FeatureIdxMatch>::const_iterator ftIdxMatchIt;
+  for (ftIdxMatchIt = filePairFeatureMatches.begin(); 
+       ftIdxMatchIt != filePairFeatureMatches.end();
+       ++ftIdxMatchIt) {
+    int queryFeatureIdx = ftIdxMatchIt->first;
+    int targetFeatureIdx = ftIdxMatchIt->second.targetFeatureIdx;
+    float posteriorErrorProb = ftIdxMatchIt->second.posteriorErrorProb;
+    
+    if (isRevFilePair) std::swap(queryFeatureIdx, targetFeatureIdx);
+    
+    FeatureId queryFeatureId(queryFileIdx, queryFeatureIdx);
+    FeatureId targetFeatureId(targetFileIdx, targetFeatureIdx);
+    
+    /* placeholder links have a PEP of 1.0, we do not have to follow these
+       if no observed feature is present further down the alignment tree */    
+    if (posteriorErrorProb == 1.0) {
+      if (isRevFilePair && queryLinksToObservedFeature.find(queryFeatureIdx) == queryLinksToObservedFeature.end()) {
+        continue;
+      }
+      /* PEP=1.0 would destroy the linkPEP score, we deal with this downstream */
+      posteriorErrorProb = 0.0;
+    }
+    targetLinksToObservedFeature.insert(targetFeatureIdx);
+    
+    addToFeatureGroup(queryFeatureId, targetFeatureId, posteriorErrorProb,
+        queryFeatureIdToGroupId, targetFeatureIdToGroupId, groupIdMap);
+  }
+  
+  filePairFeatureMatches.clear();
 }
 
 void FeatureGroups::addToFeatureGroup(const FeatureId& queryFeatureId,

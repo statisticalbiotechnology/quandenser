@@ -125,6 +125,16 @@ class FeatureGroups {
     FeatureToGroupMap& targetFeatureIdToGroupId,
     std::map<size_t, size_t>& groupIdMap);
   
+  void processFeatureAlignment(FilePair& filePair, 
+    std::map<int, FeatureIdxMatch>& filePairFeatureMatches,
+    const std::string& tmpFilePrefixAlign,
+    FeatureToGroupMap& queryFeatureIdToGroupId,
+    FeatureToGroupMap& targetFeatureIdToGroupId,
+    std::set<size_t>& queryLinksToRealFeature,
+    std::set<size_t>& targetLinksToRealFeature,
+    std::map<size_t, size_t>& groupIdMap,
+    bool isRevFilePair);
+    
   void mergeFeatureGroups(const size_t clusterIdx, 
     const size_t mergeInClusterIdx);
   
