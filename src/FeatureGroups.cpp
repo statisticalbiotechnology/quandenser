@@ -17,6 +17,29 @@
 #include "FeatureGroups.h"
 #include "boost/lexical_cast.hpp"
 
+#include <unistd.h>
+#include <sys/resource.h>
+
+/**
+ * Returns the current resident set size (physical memory use) measured
+ * in bytes, or zero if the value cannot be determined on this OS.
+ */
+size_t getCurrentRSS( )
+{
+    /* Linux ---------------------------------------------------- */
+    long rss = 0L;
+    FILE* fp = NULL;
+    if ( (fp = fopen( "/proc/self/statm", "r" )) == NULL )
+        return (size_t)0L;      /* Can't open? */
+    if ( fscanf( fp, "%*s%ld", &rss ) != 1 )
+    {
+        fclose( fp );
+        return (size_t)0L;      /* Can't read? */
+    }
+    fclose( fp );
+    return (size_t)rss * (size_t)sysconf( _SC_PAGESIZE);
+}
+
 namespace quandenser {
 
 bool operator<(const FeatureIdMatch& l, const FeatureIdMatch& r) {
@@ -44,6 +67,8 @@ void FeatureGroups::singleLinkClustering(
       remove(fileName.c_str());
     }
   }
+  
+  std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
   
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   int filePairCnt = 0;
@@ -90,6 +115,20 @@ void FeatureGroups::singleLinkClustering(
     }
     
     linksToObservedFeature.at(queryFileIdx).clear();
+    
+    std::cerr << "Num clusters: " << featureGroups_.size() << std::endl;
+    std::cerr << "Num clusters allocated: " << featureGroups_.capacity() << std::endl;
+    std::vector<std::vector<FeatureIdMatch> >::iterator ftGroupIt;
+    size_t numLinks = 0;
+    size_t numLinksAllocated = 0;
+    for (ftGroupIt = featureGroups_.begin(); ftGroupIt != featureGroups_.end(); ++ftGroupIt) {
+      numLinks += ftGroupIt->size();
+      numLinksAllocated += ftGroupIt->capacity();
+    }
+    std::cerr << "Num links: " << numLinks << std::endl;
+    std::cerr << "Num links allocated: " << numLinksAllocated << std::endl;
+    std::cerr << "Num cluster id mappings: " << groupIdMap.size() << std::endl;
+    std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
   }
   
   if (!tmpFilePrefixGroup.empty()) {
@@ -196,12 +235,18 @@ void FeatureGroups::mergeFeatureGroups(const size_t clusterIdx,
       featureGroups_[clusterIdx].end(), 
       featureGroups_[mergeInClusterIdx].begin(), 
       featureGroups_[mergeInClusterIdx].end() );
-  featureGroups_[mergeInClusterIdx].clear();
+  std::vector<FeatureIdMatch>().swap(featureGroups_[mergeInClusterIdx]);
 }
 
 void FeatureGroups::filterConsensusFeatures(
     const std::vector<DinosaurFeatureList>& allFeatures,
     std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster) {
+  if (Globals::VERB > 2) {
+    std::cerr << "Applying intensity score filter for consensus spectrum "
+              << "to feature group assignments." << std::endl;
+    std::cerr << "  Mem usage: " << getCurrentRSS() << std::endl;
+  }
+  
   std::map<int, std::vector< std::pair<float, std::vector<FeatureId> > > > intensityScores;
   
   std::vector<std::vector<FeatureIdMatch> >::iterator ftGroupIt;
@@ -277,26 +322,42 @@ void FeatureGroups::filterConsensusFeatures(
       }
     }
   }
+  
+  if (Globals::VERB > 2) {
+    std::cerr << "Finished applying intensity score filter." << std::endl;
+    std::cerr << "  Mem usage: " << getCurrentRSS() << std::endl;
+  }
 }
 
 void FeatureGroups::printFeatureGroups(
     const std::string& featureGroupsOutFile,
-    std::vector<DinosaurFeatureList>& allFeatures,
+    const std::vector<DinosaurFeatureList>& allFeatures,
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures) {  
+  if (Globals::VERB > 2) {
+    std::cerr << "Writing feature groups to output file." << std::endl;
+    std::cerr << "  Mem usage: " << getCurrentRSS() << std::endl;
+  }
+  
   std::ofstream dataStream(featureGroupsOutFile.c_str(), ios::out);
   dataStream.precision(9);
   
-  std::vector<std::vector<FeatureIdMatch> >::iterator ftGroupIt;
   size_t featureGroupIdx = 1u;
-  for (ftGroupIt = featureGroups_.begin(); ftGroupIt != featureGroups_.end(); ++ftGroupIt) {
-    if (ftGroupIt->empty()) continue;
+#pragma omp parallel for schedule(dynamic, 1000) 
+  for (size_t processedFeatureGroups = 0u; processedFeatureGroups < featureGroups_.size(); ++processedFeatureGroups) {
+    std::vector<FeatureIdMatch>& ftGroup = featureGroups_.at(processedFeatureGroups);
+    if (Globals::VERB > 2 && processedFeatureGroups % 10000 == 0) {
+      std::cerr << "  Processing feature group " << processedFeatureGroups
+                << " / " << featureGroups_.size() << std::endl;
+    }
+    
+    if (ftGroup.empty()) continue;
     
     SimilarityMatrix<FeatureId> simMatrix;
     std::set<FeatureId> featureIds;
     
     std::vector<FeatureIdMatch>::const_iterator ftMatchIt;
-    for (ftMatchIt = ftGroupIt->begin(); ftMatchIt != ftGroupIt->end(); ++ftMatchIt) {
+    for (ftMatchIt = ftGroup.begin(); ftMatchIt != ftGroup.end(); ++ftMatchIt) {
       featureIds.insert(ftMatchIt->queryFeatureId);
       featureIds.insert(ftMatchIt->targetFeatureId);
       
@@ -304,10 +365,6 @@ void FeatureGroups::printFeatureGroups(
                            ftMatchIt->targetFeatureId, 
                            1.0 - ftMatchIt->posteriorErrorProb);
     }
-    
-    std::map<FeatureId, std::map<int, float> > spectrumClusterLinkPEPs;
-    propagateSpectrumClusterIds(featureIds, featureToSpectrumCluster, 
-        simMatrix, spectrumClusterLinkPEPs);
           
     float sumPrecMz = 0.0f;
     std::set<int> uniqueFileIdxs;
@@ -333,18 +390,30 @@ void FeatureGroups::printFeatureGroups(
       consensusFeature.featureIdx = featureGroupIdx++;
       consensusFeature.fileIdx = -1;
       
-      std::map<int, size_t> spectrumClusterIdxOffsets;
-      addConsensusFeatureToSpectrumClusters(
-          consensusFeature, spectrumClusterLinkPEPs,
-          spectrumClusterToConsensusFeatures, spectrumClusterIdxOffsets);
-      
-      printFeatureGroup(features, spectrumClusterLinkPEPs, 
-          spectrumClusterIdxOffsets, dataStream);
+      std::map<FeatureId, std::map<int, float> > spectrumClusterLinkPEPs;
+      propagateSpectrumClusterIds(featureIds, featureToSpectrumCluster, 
+          simMatrix, spectrumClusterLinkPEPs);
+    
+    #pragma omp critical
+      {
+        std::map<int, size_t> spectrumClusterIdxOffsets;
+        addConsensusFeatureToSpectrumClusters(
+            consensusFeature, spectrumClusterLinkPEPs,
+            spectrumClusterToConsensusFeatures, spectrumClusterIdxOffsets);
+        
+        printFeatureGroup(features, spectrumClusterLinkPEPs, 
+            spectrumClusterIdxOffsets, dataStream);
+      }
       
       if (Globals::VERB > 2 && featureGroupIdx % 10000 == 0) {
-        std::cerr << "Writing feature group " << featureGroupIdx << std::endl;
+        std::cerr << "  Writing feature group " << featureGroupIdx << std::endl;
       }
     }
+  }
+  
+  if (Globals::VERB > 2) {
+    std::cerr << "Finished writing feature groups." << std::endl;
+    std::cerr << "  Mem usage: " << getCurrentRSS() << std::endl;
   }
 }
 
@@ -438,10 +507,11 @@ void FeatureGroups::updateLinkPEPs(
        clusterIdxIt != clusterIdxs.end(); ++clusterIdxIt) {
     std::map<FeatureId, float>::const_iterator ftMatchIt;
     for (ftMatchIt = similarities.begin(); ftMatchIt != similarities.end(); ++ftMatchIt) {
+      std::map<int, float>& row = spectrumClusterLinkPEPs[ftMatchIt->first];
       if (rootFeatureId != ftMatchIt->first && 
-          (spectrumClusterLinkPEPs[ftMatchIt->first].find(*clusterIdxIt) == spectrumClusterLinkPEPs[ftMatchIt->first].end() || 
-           1.0 - ftMatchIt->second < spectrumClusterLinkPEPs[ftMatchIt->first][*clusterIdxIt])) {
-        spectrumClusterLinkPEPs[ftMatchIt->first][*clusterIdxIt] = 1.0 - ftMatchIt->second;
+          (row.find(*clusterIdxIt) == row.end() || 
+           1.0 - ftMatchIt->second < row[*clusterIdxIt])) {
+        row[*clusterIdxIt] = 1.0 - ftMatchIt->second;
       }
     }
     spectrumClusterLinkPEPs[rootFeatureId][*clusterIdxIt] = 0.0;

@@ -22,6 +22,8 @@
 #include <set>
 #include <cmath>
 
+#include <boost/unordered/unordered_map.hpp>
+
 #include "maracluster/src/SpectrumFileList.h"
 #include "maracluster/src/ScanId.h"
 #include "maracluster/src/BinaryInterface.h"
@@ -82,7 +84,7 @@ class FeatureToGroupMap {
     maracluster::BinaryInterface::write(featureGroupPairs, ftFile, append);
   }
  protected:
-  std::map<int, size_t> featureIdToGroupId_;
+  boost::unordered_map<int, size_t> featureIdToGroupId_;
   
 };
 
@@ -105,7 +107,7 @@ class FeatureGroups {
   
   void printFeatureGroups(
     const std::string& featureGroupsOutFile,
-    std::vector<DinosaurFeatureList>& allFeatures,
+    const std::vector<DinosaurFeatureList>& allFeatures,
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures);
   

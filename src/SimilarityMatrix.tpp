@@ -34,9 +34,10 @@ void SimilarityMatrix<Node>::computeShortestPathsFromSource(Node key1,
       if (similarities.size() == matrix_.size()) break;
       
       typename std::map<Node, float>::const_iterator node2It;
-      for (node2It = matrix_[node1].begin(); node2It != matrix_[node1].end(); ++node2It) {
+      std::map<Node, float>& row = matrix_[node1];
+      for (node2It = row.begin(); node2It != row.end(); ++node2It) {
         if (similarities.find(node2It->first) == similarities.end()) {
-          searchQueue.push(std::make_pair(sim * matrix_[node1][node2It->first], node2It->first));
+          searchQueue.push(std::make_pair(sim * node2It->second, node2It->first));
         }
       }
     }

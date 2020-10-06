@@ -226,7 +226,7 @@ bool Quandenser::parseOptions(int argc, char **argv) {
   }
 
   if (cmd.optionSet("max-missing")) {
-    maxMissingValues_ = cmd.getInt("max-missing", 0, 1000);;
+    maxMissingValues_ = cmd.getInt("max-missing", 0, 10000);
   }
 
   if (cmd.optionSet("verbatim")) {
@@ -1097,9 +1097,14 @@ int Quandenser::run() {
   if (useTempFiles_) {
     loadAllFeatures(tmpFilePrefixAlign, allFeatures);
   }
-
-  for (ftListIt = allFeatures.begin(); ftListIt != allFeatures.end(); ++ftListIt) {
-    ftListIt->buildFeatureIdxToVectorIdxMap();
+  
+  if (Globals::VERB > 1) {
+    std::cerr << "Building feature index maps" << std::endl;
+  }
+  
+#pragma omp parallel for schedule(dynamic, 1)  
+  for (size_t fileIdx = 0; fileIdx < allFeatures.size(); ++fileIdx) {
+    allFeatures.at(fileIdx).buildFeatureIdxToVectorIdxMap();
   }
 
   featureGroups.filterConsensusFeatures(allFeatures, featureToSpectrumCluster);
@@ -1118,7 +1123,7 @@ int Quandenser::run() {
       allFeatures, featureToSpectrumCluster,
       maraclusterAdapter.getSpectrumClusterToConsensusFeatures());
   featureGroups.clear(); // unload feature groups from memory
-
+  return EXIT_SUCCESS;
   if (useTempFiles_) {
     unloadAllFeatures(allFeatures);
   }
