@@ -18,11 +18,20 @@ namespace quandenser {
 
 /* Dijkstra's algorithm */
 template <class Node>
-void SimilarityMatrix<Node>::computeShortestPathsFromSource(Node key1, 
+void SimilarityMatrix<Node>::computeShortestPathsFromSource(
     std::map<Node, float>& similarities) {
   
   std::priority_queue<std::pair<float, Node> > searchQueue;
-  searchQueue.push(std::make_pair(1.0, key1));
+  typename std::map<Node, float>::iterator simIt;
+  for (simIt = similarities.begin(); simIt != similarities.end(); ++simIt) {
+    typename std::map<Node, float>::const_iterator node2It;
+    std::map<Node, float>& row = matrix_[simIt->first];
+    for (node2It = row.begin(); node2It != row.end(); ++node2It) {
+      if (similarities.find(node2It->first) == similarities.end()) {
+        searchQueue.push(std::make_pair(node2It->second, node2It->first));
+      }
+    }
+  }
   
   while (searchQueue.size() > 0) {
     std::pair<float, Node> simNodePair = searchQueue.top();

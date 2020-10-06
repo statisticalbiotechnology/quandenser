@@ -387,26 +387,31 @@ void FeatureGroups::printFeatureGroups(
     if (numFilesMissing <= maxMissingValues_ && !features.empty()) {        
       DinosaurFeature consensusFeature = features.at(0);
       consensusFeature.precMz = sumPrecMz / features.size();
-      consensusFeature.featureIdx = featureGroupIdx++;
+    #pragma omp critical(feature_idx)
+      {
+        consensusFeature.featureIdx = featureGroupIdx++;
+        if (Globals::VERB > 2 && featureGroupIdx % 10000 == 0) {
+          std::cerr << "  Writing feature group " << featureGroupIdx << std::endl;
+        }
+      }
       consensusFeature.fileIdx = -1;
       
-      std::map<FeatureId, std::map<int, float> > spectrumClusterLinkPEPs;
+      std::map<int, std::map<FeatureId, float> > spectrumClusterLinkPEPs;
       propagateSpectrumClusterIds(featureIds, featureToSpectrumCluster, 
           simMatrix, spectrumClusterLinkPEPs);
-    
-    #pragma omp critical
+      
+      std::map<int, size_t> spectrumClusterIdxOffsets;
+    #pragma omp critical(assign_features)
       {
-        std::map<int, size_t> spectrumClusterIdxOffsets;
         addConsensusFeatureToSpectrumClusters(
             consensusFeature, spectrumClusterLinkPEPs,
             spectrumClusterToConsensusFeatures, spectrumClusterIdxOffsets);
-        
+      }
+    
+    #pragma omp critical(print_features)
+      {
         printFeatureGroup(features, spectrumClusterLinkPEPs, 
             spectrumClusterIdxOffsets, dataStream);
-      }
-      
-      if (Globals::VERB > 2 && featureGroupIdx % 10000 == 0) {
-        std::cerr << "  Writing feature group " << featureGroupIdx << std::endl;
       }
     }
   }
@@ -419,13 +424,12 @@ void FeatureGroups::printFeatureGroups(
 
 void FeatureGroups::addConsensusFeatureToSpectrumClusters(
     const DinosaurFeature& consensusFeature,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs,
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures,
     std::map<int, size_t>& spectrumClusterIdxOffsets) {
-  std::map<int, float>::const_iterator specClustIt;
-  FeatureId ftId = spectrumClusterLinkPEPs.begin()->first;
-  for (specClustIt = spectrumClusterLinkPEPs[ftId].begin(); 
-       specClustIt != spectrumClusterLinkPEPs[ftId].end(); 
+  std::map<int, std::map<FeatureId, float> >::const_iterator specClustIt;
+  for (specClustIt = spectrumClusterLinkPEPs.begin(); 
+       specClustIt != spectrumClusterLinkPEPs.end(); 
        ++specClustIt) {
     int specClustIdx = specClustIt->first;
     /* MaRaCluster creates scan numbers by scannr*100+i, this breaks if i>99 */
@@ -434,15 +438,15 @@ void FeatureGroups::addConsensusFeatureToSpectrumClusters(
       spectrumClusterToConsensusFeatures[specClustIdx].push_back(consensusFeature);
       spectrumClusterIdxOffsets[specClustIdx] = spectrumClusterToConsensusFeatures[specClustIdx].size();
     }
-  }   
+  }
 }
 
 void FeatureGroups::printFeatureGroup(
     const std::vector<DinosaurFeature>& features,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs,
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs,
     std::map<int, size_t>& spectrumClusterIdxOffsets,
     std::ostream& dataStream) {
-  std::map<int, float>::const_iterator specClustIt;
+  std::map<int, std::map<FeatureId, float> >::iterator specClustIt;
   std::vector<DinosaurFeature>::const_iterator ftIt;        
   for (ftIt = features.begin(); ftIt != features.end(); ++ftIt) {          
     dataStream << ftIt->fileIdx << "\t" 
@@ -452,13 +456,17 @@ void FeatureGroups::printFeatureGroup(
                << ftIt->intensity << "\t";
     
     FeatureId ftId(ftIt->fileIdx, ftIt->featureIdx);
-    for (specClustIt = spectrumClusterLinkPEPs[ftId].begin(); 
-         specClustIt != spectrumClusterLinkPEPs[ftId].end(); ) {
+    for (specClustIt = spectrumClusterLinkPEPs.begin(); 
+         specClustIt != spectrumClusterLinkPEPs.end(); ) {
       int specClustIdx = specClustIt->first;
+      float postErrProb = specClustIt->second[ftId];
+      if (postErrProb > 0) {
+        postErrProb = 1.0 - postErrProb;
+      }
       dataStream << specClustIdx*100 + spectrumClusterIdxOffsets[specClustIdx] 
-                 << ";" << specClustIt->second;
+                 << ";" << postErrProb;
       ++specClustIt;
-      if (specClustIt != spectrumClusterLinkPEPs[ftId].end()) {
+      if (specClustIt != spectrumClusterLinkPEPs.end()) {
         dataStream << ",";
       }
     }
@@ -471,50 +479,40 @@ void FeatureGroups::propagateSpectrumClusterIds(
     const std::set<FeatureId>& featureIds, 
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster,
     SimilarityMatrix<FeatureId>& simMatrix,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs) {
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs) {
   bool foundClusterIdx = false;
-  std::vector<int> clusterIdxs;
+  std::set<int> featureGroupClusterIdxs;
+  
+  if (featureIds.size() > 200) {
+    std::cerr << "Start" << std::endl;
+  }
   for (std::set<FeatureId>::const_iterator ftIt = featureIds.begin(); 
        ftIt != featureIds.end(); ++ftIt) {
     if (featureToSpectrumCluster.find(*ftIt) != featureToSpectrumCluster.end() &&
         !featureToSpectrumCluster.find(*ftIt)->second.empty()) {
-      std::vector<int> clusterIdxs(featureToSpectrumCluster.find(*ftIt)->second);
-      foundClusterIdx = true;
-      std::map<FeatureId, float> similarities;
-      simMatrix.computeShortestPathsFromSource(*ftIt, similarities);
-      updateLinkPEPs(*ftIt, clusterIdxs, similarities, spectrumClusterLinkPEPs);
+      std::vector<int>::const_iterator clusterIt;
+      const std::vector<int>& featureClusterIdxs = featureToSpectrumCluster.find(*ftIt)->second;
+      for (clusterIt = featureClusterIdxs.begin(); clusterIt != featureClusterIdxs.end(); ++clusterIt) {
+        foundClusterIdx = true;
+        spectrumClusterLinkPEPs[*clusterIt][*ftIt] = 0.0;
+      }
     }
+  }
+  
+  if (featureIds.size() > 200) {
+    std::cerr << "Finish " << featureIds.size() << " " << spectrumClusterLinkPEPs.size() << std::endl;
   }
   
   if (!foundClusterIdx) {
     /* if no spectra are associated with the feature group, pick one as root
          TODO: replace this by the "most central" node */
-    FeatureId rootFeatureId = *(featureIds.begin()); 
-    std::vector<int> clusterIdxs(1, 0);
-    std::map<FeatureId, float> similarities;
-    simMatrix.computeShortestPathsFromSource(rootFeatureId, similarities);
-    updateLinkPEPs(rootFeatureId, clusterIdxs, similarities, spectrumClusterLinkPEPs);
+    FeatureId rootFeatureId = *(featureIds.begin());
+    spectrumClusterLinkPEPs[0][rootFeatureId] = 0.0;
   }
-}
-
-void FeatureGroups::updateLinkPEPs(
-    const FeatureId rootFeatureId,
-    const std::vector<int>& clusterIdxs,
-    const std::map<FeatureId, float>& similarities,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs) {
-  std::vector<int>::const_iterator clusterIdxIt;
-  for (clusterIdxIt = clusterIdxs.begin(); 
-       clusterIdxIt != clusterIdxs.end(); ++clusterIdxIt) {
-    std::map<FeatureId, float>::const_iterator ftMatchIt;
-    for (ftMatchIt = similarities.begin(); ftMatchIt != similarities.end(); ++ftMatchIt) {
-      std::map<int, float>& row = spectrumClusterLinkPEPs[ftMatchIt->first];
-      if (rootFeatureId != ftMatchIt->first && 
-          (row.find(*clusterIdxIt) == row.end() || 
-           1.0 - ftMatchIt->second < row[*clusterIdxIt])) {
-        row[*clusterIdxIt] = 1.0 - ftMatchIt->second;
-      }
-    }
-    spectrumClusterLinkPEPs[rootFeatureId][*clusterIdxIt] = 0.0;
+  
+  std::map<int, std::map<FeatureId, float> >::iterator clusterIt;
+  for (clusterIt = spectrumClusterLinkPEPs.begin(); clusterIt != spectrumClusterLinkPEPs.end(); ++clusterIt) {
+    simMatrix.computeShortestPathsFromSource(clusterIt->second);
   }
 }
 

@@ -33,7 +33,7 @@ template <class Node> class SimilarityMatrix {
   SimilarityMatrix(){};
   ~SimilarityMatrix(){};
   
-  void computeShortestPathsFromSource(Node key1,
+  void computeShortestPathsFromSource(
     std::map<Node, float>& similarities);
   void updateLink(Node key1, Node key2, float sim);
   inline float getSim(Node key1, Node key2) {

@@ -142,13 +142,13 @@ class FeatureGroups {
   
   void addConsensusFeatureToSpectrumClusters(
     const DinosaurFeature& consensusFeature,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs,
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs,
     std::map<int, std::vector<DinosaurFeature> >& spectrumClusterToConsensusFeatures,
     std::map<int, size_t>& spectrumClusterIdxOffsets);
   
   void printFeatureGroup(
     const std::vector<DinosaurFeature>& features,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs,
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs,
     std::map<int, size_t>& spectrumClusterIdxOffsets,
     std::ostream& dataStream);
   
@@ -156,12 +156,12 @@ class FeatureGroups {
     const std::set<FeatureId>& featureIds, 
     const std::map<FeatureId, std::vector<int> >& featureToSpectrumCluster, 
     SimilarityMatrix<FeatureId>& simMatrix,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs);
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs);
   
   void updateLinkPEPs(const FeatureId rootFeatureId,
     const std::vector<int>& clusterIdxs,
     const std::map<FeatureId, float>& similarities,
-    std::map<FeatureId, std::map<int, float> >& spectrumClusterLinkPEPs);
+    std::map<int, std::map<FeatureId, float> >& spectrumClusterLinkPEPs);
   
 };
 
