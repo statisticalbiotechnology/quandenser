@@ -1123,7 +1123,7 @@ int Quandenser::run() {
       allFeatures, featureToSpectrumCluster,
       maraclusterAdapter.getSpectrumClusterToConsensusFeatures());
   featureGroups.clear(); // unload feature groups from memory
-  return EXIT_SUCCESS;
+  //return EXIT_SUCCESS;
   if (useTempFiles_) {
     unloadAllFeatures(allFeatures);
   }

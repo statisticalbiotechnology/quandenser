@@ -68,7 +68,9 @@ void FeatureGroups::singleLinkClustering(
     }
   }
   
-  std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
+  if (Globals::VERB > 2) {
+    std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
+  }
   
   std::vector<std::pair<int, FilePair> >::const_iterator filePairIt;
   int filePairCnt = 0;
@@ -116,19 +118,24 @@ void FeatureGroups::singleLinkClustering(
     
     linksToObservedFeature.at(queryFileIdx).clear();
     
-    std::cerr << "Num clusters: " << featureGroups_.size() << std::endl;
-    std::cerr << "Num clusters allocated: " << featureGroups_.capacity() << std::endl;
-    std::vector<std::vector<FeatureIdMatch> >::iterator ftGroupIt;
-    size_t numLinks = 0;
-    size_t numLinksAllocated = 0;
-    for (ftGroupIt = featureGroups_.begin(); ftGroupIt != featureGroups_.end(); ++ftGroupIt) {
-      numLinks += ftGroupIt->size();
-      numLinksAllocated += ftGroupIt->capacity();
+    if (Globals::VERB > 4) {
+      std::cerr << "Num clusters: " << featureGroups_.size() << std::endl;
+      std::cerr << "Num clusters allocated: " << featureGroups_.capacity() << std::endl;
+      std::vector<std::vector<FeatureIdMatch> >::iterator ftGroupIt;
+      size_t numLinks = 0;
+      size_t numLinksAllocated = 0;
+      for (ftGroupIt = featureGroups_.begin(); ftGroupIt != featureGroups_.end(); ++ftGroupIt) {
+        numLinks += ftGroupIt->size();
+        numLinksAllocated += ftGroupIt->capacity();
+      }
+      std::cerr << "Num links: " << numLinks << std::endl;
+      std::cerr << "Num links allocated: " << numLinksAllocated << std::endl;
+      std::cerr << "Num cluster id mappings: " << groupIdMap.size() << std::endl;
     }
-    std::cerr << "Num links: " << numLinks << std::endl;
-    std::cerr << "Num links allocated: " << numLinksAllocated << std::endl;
-    std::cerr << "Num cluster id mappings: " << groupIdMap.size() << std::endl;
-    std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
+    
+    if (Globals::VERB > 2) {
+      std::cerr << "Mem usage: " << getCurrentRSS() << std::endl;
+    }
   }
   
   if (!tmpFilePrefixGroup.empty()) {
@@ -343,12 +350,18 @@ void FeatureGroups::printFeatureGroups(
   dataStream.precision(9);
   
   size_t featureGroupIdx = 1u;
-#pragma omp parallel for schedule(dynamic, 1000) 
+  //size_t memUsage = getCurrentRSS();
+//#pragma omp parallel for schedule(dynamic, 1000) 
   for (size_t processedFeatureGroups = 0u; processedFeatureGroups < featureGroups_.size(); ++processedFeatureGroups) {
     std::vector<FeatureIdMatch>& ftGroup = featureGroups_.at(processedFeatureGroups);
+    /*if (getCurrentRSS() > memUsage && getCurrentRSS() - memUsage > 1e9 && processedFeatureGroups > 0) {
+      std::cerr << processedFeatureGroups - 1 << " " << getCurrentRSS() - memUsage << " " << featureGroups_.at(processedFeatureGroups - 1).size() << std::endl;
+    }
+    memUsage = getCurrentRSS();*/
     if (Globals::VERB > 2 && processedFeatureGroups % 10000 == 0) {
       std::cerr << "  Processing feature group " << processedFeatureGroups
                 << " / " << featureGroups_.size() << std::endl;
+      std::cerr << "    Mem usage: " << getCurrentRSS() << std::endl;
     }
     
     if (ftGroup.empty()) continue;
@@ -365,6 +378,7 @@ void FeatureGroups::printFeatureGroups(
                            ftMatchIt->targetFeatureId, 
                            1.0 - ftMatchIt->posteriorErrorProb);
     }
+    //std::vector<FeatureIdMatch>().swap(ftGroup);
           
     float sumPrecMz = 0.0f;
     std::set<int> uniqueFileIdxs;
@@ -483,9 +497,6 @@ void FeatureGroups::propagateSpectrumClusterIds(
   bool foundClusterIdx = false;
   std::set<int> featureGroupClusterIdxs;
   
-  if (featureIds.size() > 200) {
-    std::cerr << "Start" << std::endl;
-  }
   for (std::set<FeatureId>::const_iterator ftIt = featureIds.begin(); 
        ftIt != featureIds.end(); ++ftIt) {
     if (featureToSpectrumCluster.find(*ftIt) != featureToSpectrumCluster.end() &&
@@ -497,10 +508,6 @@ void FeatureGroups::propagateSpectrumClusterIds(
         spectrumClusterLinkPEPs[*clusterIt][*ftIt] = 0.0;
       }
     }
-  }
-  
-  if (featureIds.size() > 200) {
-    std::cerr << "Finish " << featureIds.size() << " " << spectrumClusterLinkPEPs.size() << std::endl;
   }
   
   if (!foundClusterIdx) {
