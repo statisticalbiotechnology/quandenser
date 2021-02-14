@@ -91,6 +91,7 @@ class AlignRetention {
  protected:
   RTimePairs rTimePairs_;
   std::map<FilePair, SplineRegression> alignments_;
+  std::map<FilePair, double> rmses_;
   std::vector<FileGraphNode> fileGraphNodes_;
   int maxDepth_;
 

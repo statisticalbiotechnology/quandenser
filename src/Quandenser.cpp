@@ -410,22 +410,29 @@ int Quandenser::runMaRaCluster(const std::string& maRaClusterSubFolder,
     if (!(mode == "cluster" && fs::exists(clusterFilePath))) {
       int rc = maraclusterAdapter.run();
       if (rc != EXIT_SUCCESS) {
-        std::cerr << "MaRaCluster failed with exit code " << rc << ". Terminating.." << std::endl;
+        std::cerr << "MaRaCluster failed with exit code " << rc 
+            << ". Terminating.." << std::endl;
         return rc;
       }
     } else if (Globals::VERB > 1) {
-      std::cerr << "Found cluster result file at " << clusterFilePath << ". Remove this file to redo clustering." << std::endl;
+      std::cerr << "Found cluster result file at " << clusterFilePath 
+          << ". Remove this file to redo clustering." << std::endl;
     }
-      
 
     if (useTempFiles_ && createIndex) {
       unloadAllFeatures(allFeatures);
     }
     
     if (createIndex) {
-      spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
-      if (Globals::VERB > 1) {
-        std::cerr << "Serialized spectrum to precursor map" << std::endl;
+      if (!fs::exists(spectrumToPrecursorFile)) {
+        spectrumToPrecursorMap.serialize(spectrumToPrecursorFile);
+        if (Globals::VERB > 1) {
+          std::cerr << "Serialized spectrum to precursor map" << std::endl;
+        }
+      } else if (Globals::VERB > 1) {
+        std::cerr << "Found existing serialized spectrum to precursor map file: " 
+            << spectrumToPrecursorFile
+            << ". Remove this file to generate a new serialized file." << std::endl;
       }
     }
   }
@@ -750,7 +757,6 @@ int Quandenser::run() {
 
       features.sortByPrecMz();
 
-      allFeatures.push_back(features);
       if (Globals::VERB > 2) {
         std::cerr << "Read in " << features.size() << " features from " << it->filename() << std::endl;
       }
@@ -772,6 +778,9 @@ int Quandenser::run() {
         bool append = false;
         features.saveToFile(fileName, append);
         features.clear();
+        allFeatures.push_back(DinosaurFeatureList());
+      } else {
+        allFeatures.push_back(features);
       }
     }
   }
@@ -907,7 +916,7 @@ int Quandenser::run() {
   
   fs::path matchedFeaturesFile(outputFolder_);
   matchedFeaturesFile /= "percolator";
-  matchedFeaturesFile /= "matches";
+  matchedFeaturesFile /= "matches"; // TODO: rename this to "added_features" after Geyer run succeeds, since matches is misleading
   
   std::string addedFeaturesFile = "";
   if (isPartialRun) {

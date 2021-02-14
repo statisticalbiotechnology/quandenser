@@ -41,11 +41,11 @@ void AlignRetention::getAlignModelsTree() {
   RTimePairs::iterator filePairIt;
   std::vector<std::pair<float, FilePair> > sortedWeights;
   for (filePairIt = rTimePairs_.begin(); filePairIt != rTimePairs_.end(); ++filePairIt) {
-    if (alignments_.find(filePairIt->first) == alignments_.end()) continue;
+    if (rmses_.find(filePairIt->first) == rmses_.end()) continue;
 
     FilePair revFilePair = filePairIt->first.getRevFilePair();
-    double rmse1 = alignments_[filePairIt->first].getRmse();
-    double rmse2 = alignments_[revFilePair].getRmse();
+    double rmse1 = rmses_[filePairIt->first];
+    double rmse2 = rmses_[revFilePair];
 
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx1);
     maxFileIdx = std::max(maxFileIdx, revFilePair.fileIdx2);
@@ -84,7 +84,6 @@ void AlignRetention::getAlignModelsTree() {
         fileGraphNodes_[fileIdx2].addNeighbor(fileIdx1);
 
         addedLinks.insert(it->second);
-        addedLinks.insert(it->second.getRevFilePair());
 
         if (Globals::VERB > 2) {
           std::cerr << "Inserting link " << fileIdx1 << " to "
@@ -110,23 +109,39 @@ void AlignRetention::getAlignModelsTree() {
     throw MyException(oss.str());
   }
 
-  std::map<FilePair, SplineRegression>::iterator alignmentIt;
-  for (alignmentIt = alignments_.begin(); alignmentIt != alignments_.end(); ) {
-    if (addedLinks.find(alignmentIt->first) == addedLinks.end()) {
-      alignments_.erase(alignmentIt++);
-    } else {
-      ++alignmentIt;
-    }
+  std::set<FilePair>::iterator addedLinkIt;
+  for (addedLinkIt = addedLinks.begin(); addedLinkIt != addedLinks.end(); ++addedLinkIt) {
+    FilePair filePair = *addedLinkIt;
+    std::vector<RTimePair> rTimePairs = rTimePairs_[filePair];
+    
+    std::vector<double> medianRTimesRun1, medianRTimesRun2;
+    getKnots(rTimePairs, medianRTimesRun1, medianRTimesRun2);
+    
+    alignments_[filePair].setData(medianRTimesRun1, medianRTimesRun2);
+    alignments_[filePair].roughnessPenaltyIRLS();
+    bool reversedPair = false;
+    float rmse1 = getRMSE(alignments_[filePair], rTimePairs, reversedPair);
+    alignments_[filePair].setRmse(rmse1);
+
+    FilePair revFilePair = filePair.getRevFilePair();
+    alignments_[revFilePair].setData(medianRTimesRun2, medianRTimesRun1);
+    alignments_[revFilePair].roughnessPenaltyIRLS();
+    reversedPair = true;
+    float rmse2 = getRMSE(alignments_[revFilePair], rTimePairs, reversedPair);
+    alignments_[revFilePair].setRmse(rmse2);
   }
+  
+  rTimePairs_.clear();
+  rmses_.clear();
 }
 
 void AlignRetention::getAlignModels() {  
   /* "touch" all keys to allow OMP to concurrently fill it later */
   RTimePairs::iterator filePairItReserve;
   for (filePairItReserve = rTimePairs_.begin(); filePairItReserve != rTimePairs_.end(); ++filePairItReserve) {
-    alignments_[filePairItReserve->first];
+    rmses_[filePairItReserve->first];
     FilePair revFilePair = filePairItReserve->first.getRevFilePair();
-    alignments_[revFilePair];
+    rmses_[revFilePair];
   }
 
 #pragma omp parallel for schedule(dynamic, 100)
@@ -153,19 +168,21 @@ void AlignRetention::getAlignModels() {
       }
       continue;
     }
-
-    alignments_[filePairIt->first].setData(medianRTimesRun1, medianRTimesRun2);
-    alignments_[filePairIt->first].roughnessPenaltyIRLS();
+    
+    SplineRegression splineRegression;
+    splineRegression.setData(medianRTimesRun1, medianRTimesRun2);
+    splineRegression.roughnessPenaltyIRLS();
     bool reversedPair = false;
-    float rmse1 = getRMSE(alignments_[filePairIt->first], filePairIt->second, reversedPair);
-    alignments_[filePairIt->first].setRmse(rmse1);
-
+    float rmse1 = getRMSE(splineRegression, filePairIt->second, reversedPair);
+    rmses_[filePairIt->first] = rmse1;
+    
+    SplineRegression splineRegressionReverse;
     FilePair revFilePair = filePairIt->first.getRevFilePair();
-    alignments_[revFilePair].setData(medianRTimesRun2, medianRTimesRun1);
-    alignments_[revFilePair].roughnessPenaltyIRLS();
+    splineRegressionReverse.setData(medianRTimesRun2, medianRTimesRun1);
+    splineRegressionReverse.roughnessPenaltyIRLS();
     reversedPair = true;
-    float rmse2 = getRMSE(alignments_[revFilePair], filePairIt->second, reversedPair);
-    alignments_[revFilePair].setRmse(rmse2);
+    float rmse2 = getRMSE(splineRegressionReverse, filePairIt->second, reversedPair);
+    rmses_[revFilePair] = rmse2;
 
     if (Globals::VERB > 2) {
       float rmseComb = std::sqrt(rmse1*rmse1 + rmse2*rmse2);
@@ -173,8 +190,6 @@ void AlignRetention::getAlignModels() {
           << ": rmseComb = " << rmseComb <<  " rmse1 = " << rmse1
           << " rmse2 = " << rmse2 << " numPairs = " << filePairIt->second.size() << std::endl;
     }
-    
-    filePairIt->second.clear();
   }
 }
 
@@ -184,7 +199,7 @@ void AlignRetention::getKnots(std::vector<RTimePair>& rTimePairsSingleFilePair, 
   std::sort(rTimePairsSingleFilePair.begin(), rTimePairsSingleFilePair.end());
   rTimePairsSingleFilePair.erase(std::unique(rTimePairsSingleFilePair.begin(), rTimePairsSingleFilePair.end() ), rTimePairsSingleFilePair.end() );
 
-  std::vector<double> rTimesRun1, rTimesRun2, predictedRTimesRun2;
+  std::vector<double> rTimesRun1, rTimesRun2;
   std::vector<RTimePair>::const_iterator rtPair;
   for (rtPair = rTimePairsSingleFilePair.begin(); rtPair != rTimePairsSingleFilePair.end(); ++rtPair) {
     rTimesRun1.push_back(rtPair->rTime1);
@@ -255,7 +270,9 @@ void AlignRetention::createMinDepthTree(std::vector<std::pair<int, FilePair> >& 
     if (nodeDepth > 0) {
       FilePair filePair(nodeIt->getFileIdx(), nodeIt->getParent());
       if (Globals::VERB > 2) {
-        std::cerr << "Inserting feature alignment " << filePair.fileIdx1 << "->" << filePair.fileIdx2 << " to the queue for round " << round << "." << std::endl;
+        std::cerr << "Inserting feature alignment " << filePair.fileIdx1 
+          << "->" << filePair.fileIdx2 << " to the queue for round " 
+          << round << "." << std::endl;
       }
       featureAlignmentQueue.push_back(std::make_pair(round, filePair));
     }
@@ -264,7 +281,9 @@ void AlignRetention::createMinDepthTree(std::vector<std::pair<int, FilePair> >& 
     for (std::set<int>::const_iterator childNodeIt = nodeIt->getChildrenItBegin(); childNodeIt != nodeIt->getChildrenItEnd(); ++childNodeIt) {
       FilePair childFilePair(nodeIt->getFileIdx(), *childNodeIt);
       if (Globals::VERB > 2) {
-        std::cerr << "Inserting feature alignment " << childFilePair.fileIdx1 << "->" << childFilePair.fileIdx2 << " to the queue for round " << childRound << "." << std::endl;
+        std::cerr << "Inserting feature alignment " << childFilePair.fileIdx1 
+          << "->" << childFilePair.fileIdx2 << " to the queue for round " 
+          << childRound << "." << std::endl;
       }
       featureAlignmentQueue.push_back(std::make_pair(childRound, childFilePair));
     }
