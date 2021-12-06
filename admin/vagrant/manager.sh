@@ -266,6 +266,7 @@ Vagrant.configure("2") do |config|
   # Port forward WinRM and RDP
   config.vm.communicator = "winrm"
   # config.vm.network "forwarded_port" , host: 33390 , guest: 3389 # allows remote desktop with "vagrant rdp"
+  config.vm.network "private_network", type: "dhcp"
   
   config.vm.provider "virtualbox" do |vb|
     vb.customize ["modifyvm", :id, "--memory", "8192", "--cpus", "4"]
