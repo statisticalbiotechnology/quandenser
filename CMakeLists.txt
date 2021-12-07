@@ -100,6 +100,12 @@ MESSAGE( STATUS "Building Dinosaur with Maven" )
 execute_process(COMMAND ${MVN_CMD} package -Pconf -DskipTests -Ddir=${CMAKE_CURRENT_BINARY_DIR}/dinosaur WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/ext/dinosaur OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt ERROR_FILE ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt RESULT_VARIABLE MVN_RESULT)
 
 if(NOT "${MVN_RESULT}" STREQUAL "0")
+  file(READ ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stdout.txt DINOSAUR_STDOUT)
+  file(READ ${CMAKE_CURRENT_BINARY_DIR}/dinosaur_maven_stderr.txt DINOSAUR_STDERR)
+  
+  message(STATUS "DINOSAUR_STDOUT = ${DINOSAUR_STDOUT}")
+  message(STATUS "DINOSAUR_STDERR = ${DINOSAUR_STDERR}")
+  
   message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed: ${MVN_RESULT}")
 endif()
 
