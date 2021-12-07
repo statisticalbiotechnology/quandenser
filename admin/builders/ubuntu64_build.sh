@@ -44,7 +44,7 @@ echo -n "cmake quandenser.....";
 cmake -DTARGET_ARCH=amd64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES=ON -DCMAKE_PREFIX_PATH=$build_dir/tools $src_dir/quandenser;
 #-----make------
 echo -n "make quandenser (this will take few minutes).....";
-make VERBOSE=1 -j 4;
+make -j 4;
 make -j 4 package;
 sudo make install;
 

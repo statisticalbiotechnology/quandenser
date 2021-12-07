@@ -51,7 +51,7 @@ endfunction()
 # SET LOCATION OF MODULE FINDERS
 ###############################################################################
 
-set(CMAKE_MODULE_PATH ${QUANDENSER_SOURCE_DIR}/cmake)
+set(CMAKE_MODULE_PATH ${QUANDENSER_SOURCE_DIR}/cmake;${MARACLUSTER_SOURCE_DIR}/cmake)
 
 ###############################################################################
 # SET GLOBAL VARIABLES

@@ -11,6 +11,8 @@ endif()
 
 project(QUANDENSER)
 set(QUANDENSER_SOURCE_DIR ${CMAKE_SOURCE_DIR})
+set(MARACLUSTER_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/maracluster)
+set(PERCOLATOR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/percolator)
 include("CommonCMake.txt")
 
 ###############################################################################
@@ -57,8 +59,6 @@ get_arch("${TARGET_ARCH}")
 # COMPILING MARACLUSTER
 ###############################################################################
 
-set(MARACLUSTER_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/maracluster)
-
 include("${MARACLUSTER_SOURCE_DIR}/CommonCMake.txt") # get the "local" version number
 load_config_files_with_output_dir("${MARACLUSTER_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext/maracluster")
 
@@ -72,8 +72,6 @@ endforeach()
 ###############################################################################
 # COMPILING PERCOLATOR
 ###############################################################################
-
-set(PERCOLATOR_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/percolator)
 
 include("${PERCOLATOR_SOURCE_DIR}/CommonCMake.txt") # get the "local" version number
 load_config_files_with_output_dir("${PERCOLATOR_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/ext/percolator")
