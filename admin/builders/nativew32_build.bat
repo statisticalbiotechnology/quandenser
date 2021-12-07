@@ -56,7 +56,7 @@ if not exist "%CMAKE_DIR%" (
 )
 set CMAKE_EXE="%CMAKE_DIR%\bin\cmake.exe"
 
-call %SRC_DIR%\maracluster\admin\builders\install_proteowizard.bat 32bit
+call %SRC_DIR%\quandenser\ext\maracluster\admin\builders\install_proteowizard.bat 32bit
 
 set MVN_DIR=%INSTALL_DIR%\%MVN_BASE%
 if not exist "%MVN_DIR" (
