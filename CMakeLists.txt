@@ -109,7 +109,7 @@ if(NOT "${MVN_RESULT}" STREQUAL "0")
   message(FATAL_ERROR "Cannot create module Dinosaur, mvn execution failed: ${MVN_RESULT}")
 endif()
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.2.0.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dinosaur/Dinosaur-1.2.1.free.jar ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur.txt ${CMAKE_SOURCE_DIR}/ext/advParams_dinosaur_targeted.txt DESTINATION ${JAR_PATH})
 
 ###############################################################################
 # COMPILING QUANDENSER
