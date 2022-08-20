@@ -40,10 +40,8 @@ jobs:
         submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
-    - name: ignore_rpmbuild_errors
-      run: export QA_RPATHS=$(( 0x0001|0x0020 ))
     - name: configure_and_make
-      run: ./admin/builders/fedora64_build.sh -s `pwd`/.. -r `pwd`/../my_rel -b `pwd`/../my_build
+      run: export QA_RPATHS=$(( 0x0001|0x0020 )) && ./admin/builders/fedora64_build.sh -s `pwd`/.. -r `pwd`/../my_rel -b `pwd`/../my_build
     - name: Upload packages
       uses: actions/upload-artifact@v1
       with:
@@ -57,7 +55,7 @@ jobs:
     - name: update_git_version
       run: yum install -y https://packages.endpointdev.com/rhel/7/os/x86_64/endpoint-repo.x86_64.rpm
     - name: preinstall
-      run: yum install -y sudo scl-utils wget make git
+      run: (yum check-updates || true) && yum install -y sudo scl-utils wget make git
     - uses: actions/checkout@v2
       with:
         submodules: true
