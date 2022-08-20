@@ -22,6 +22,11 @@ include("CommonCMake.txt")
 my_set(CMAKE_BUILD_TYPE "Debug" "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel.")
 my_set(CMAKE_PREFIX_PATH "../" "Default path to packages")
 
+option(TARBALL_BUILD "Create a tarball instead of an installer package." OFF)
+if(TARBALL_BUILD)
+  add_definitions(-DTARBALL_BUILD) # triggers if statements in CPack.txt
+endif(TARBALL_BUILD)
+
 option(VENDOR_SUPPORT "Add support for reading vendor RAW files using Proteowizard." OFF)
 if(VENDOR_SUPPORT)
   add_definitions(-DVENDOR_SUPPORT) # triggers ifdef statements in the C++ code

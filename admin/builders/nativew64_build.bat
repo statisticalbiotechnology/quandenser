@@ -147,6 +147,7 @@ cd /D "%SRC_DIR%"
 EXIT /B %exit_code%
 
 :downloadfile
+echo Downloading %1 to %2
 PowerShell "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; (new-object System.Net.WebClient).DownloadFile('%1','%2')"
 EXIT /B
 
