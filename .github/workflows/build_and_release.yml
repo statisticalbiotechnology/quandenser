@@ -10,10 +10,10 @@ jobs:
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
     - uses: actions/checkout@v2
+    - name: preinstall
+      run: apt update && apt -y install sudo wget rsync g++ make cmake git
     - name: checkout_submodules
       run: git submodule update --init
-    - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -32,10 +32,10 @@ jobs:
     container: 'fedora:35'
     steps:
     - uses: actions/checkout@v2
+    - name: preinstall
+      run: dnf install -y wget rsync make git
     - name: checkout_submodules
       run: git submodule update --init
-    - name: preinstall
-      run: dnf install -y wget rsync make
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: ignore_rpmbuild_errors
@@ -53,10 +53,10 @@ jobs:
     container: 'centos:centos7'
     steps:
     - uses: actions/checkout@v2
+    - name: preinstall
+      run: yum install -y sudo scl-utils wget make git
     - name: checkout_submodules
       run: git submodule update --init
-    - name: preinstall
-      run: yum install -y sudo scl-utils wget make
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -72,10 +72,10 @@ jobs:
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
     - uses: actions/checkout@v2
+    - name: preinstall
+      run: apt update && apt -y install sudo wget rsync g++ make cmake git
     - name: checkout_submodules
       run: git submodule update --init
-    - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
