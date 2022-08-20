@@ -9,13 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
-    - name: update_git
-      run: add-apt-repository ppa:git-core/ppa
-    - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake git
     - uses: actions/checkout@v2
-      with:
-        submodules: true
+    - name: checkout_submodules
+      run: git submodule update --init
+    - name: preinstall
+      run: apt update && apt -y install sudo wget rsync g++ make cmake
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -33,13 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     container: 'fedora:35'
     steps:
-    - name: preinstall
-      run: dnf install -y wget rsync make git
     - uses: actions/checkout@v2
-      with:
-        submodules: true
+    - name: checkout_submodules
+      run: git submodule update --init
+    - name: preinstall
+      run: dnf install -y wget rsync make
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
+    - name: ignore_rpmbuild_errors
+      run: export QA_RPATHS=$(( 0x0001|0x0020 ))
     - name: configure_and_make
       run: ./admin/builders/fedora64_build.sh -s `pwd`/.. -r `pwd`/../my_rel -b `pwd`/../my_build
     - name: Upload packages
@@ -52,13 +52,11 @@ jobs:
     runs-on: ubuntu-latest
     container: 'centos:centos7'
     steps:
-    - name: update_git
-      run: yum install -y https://packages.endpointdev.com/rhel/7/os/x86_64/endpoint-repo.x86_64.rpm
-    - name: preinstall
-      run: yum check-update && yum install -y sudo scl-utils wget make git
     - uses: actions/checkout@v2
-      with:
-        submodules: true
+    - name: checkout_submodules
+      run: git submodule update --init
+    - name: preinstall
+      run: yum install -y sudo scl-utils wget make
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -73,13 +71,11 @@ jobs:
     runs-on: ubuntu-latest
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
-    - name: update_git
-      run: add-apt-repository ppa:git-core/ppa
-    - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake git
     - uses: actions/checkout@v2
-      with:
-        submodules: true
+    - name: checkout_submodules
+      run: git submodule update --init
+    - name: preinstall
+      run: apt update && apt -y install sudo wget rsync g++ make cmake
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
