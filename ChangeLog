@@ -1,3 +1,8 @@
+v0.03.2
+* Updated ProteoWizard (v3.0.22231)
+* Updated Dinosaur (v1.2.1) to fix Maven build
+* Updated MaRaCluster (v1.02.1)
+
 v0.03.1
 * Fixed Dinosaur issue with recent ProteoWizard mzML files (#20)
 * Fixed MaRaCluster issue with nativeIds in recent ProteoWizard mzML files
