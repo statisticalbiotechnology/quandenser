@@ -9,11 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
-    - uses: actions/checkout@v2
     - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake git
-    - name: checkout_submodules
-      run: git submodule update --init
+      run: apt update && apt -y install sudo wget rsync g++ make cmake software-properties-common
+    - name: update_git_version
+      run: add-apt-repository ppa:git-core/ppa && apt update && apt -y install git
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -31,11 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     container: 'fedora:35'
     steps:
-    - uses: actions/checkout@v2
     - name: preinstall
       run: dnf install -y wget rsync make git
-    - name: checkout_submodules
-      run: git submodule update --init
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: ignore_rpmbuild_errors
@@ -52,11 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     container: 'centos:centos7'
     steps:
-    - uses: actions/checkout@v2
+    - name: update_git_version
+      run: yum install -y https://packages.endpointdev.com/rhel/7/os/x86_64/endpoint-repo.x86_64.rpm
     - name: preinstall
       run: yum install -y sudo scl-utils wget make git
-    - name: checkout_submodules
-      run: git submodule update --init
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
@@ -71,11 +75,13 @@ jobs:
     runs-on: ubuntu-latest
     container: 'ubuntu:18.04' # start with a clean environment instead of the default github runner for higher reproducibility
     steps:
-    - uses: actions/checkout@v2
     - name: preinstall
-      run: apt update && apt -y install sudo wget rsync g++ make cmake git
-    - name: checkout_submodules
-      run: git submodule update --init
+      run: apt update && apt -y install sudo wget rsync g++ make cmake software-properties-common
+    - name: update_git_version
+      run: add-apt-repository ppa:git-core/ppa && apt update && apt -y install git
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
     - name: create_dirs
       run: mkdir -p ../my_rel ../my_build
     - name: configure_and_make
